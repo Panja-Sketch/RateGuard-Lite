@@ -43,13 +43,11 @@ def integrity_findings(t: RateTable, pair_id: str, display: str, side: str, cfg:
                 elif base == "AMBIGUOUS_DATE" and emitted[base] < _CAP:
                     emitted[base] += 1
                     out.append(make_finding("AMBIGUOUS_DATE", status=Status.NEEDS_REVIEW, table_id=pair_id, table_name=display,
-                                            approved_ref=ref(t, c), message=f"[{side}] date '{c.raw}' at {c.coord} cannot be resolved unambiguously.",
-                                            explanation="The date could be read in more than one way.", suggested_fix="Use an unambiguous date (YYYY-MM-DD)."))
+                                            approved_ref=ref(t, c), message=f"[{side}] date '{c.raw}' at {c.coord} cannot be resolved unambiguously.",))
                 elif base == "UNPARSEABLE" and emitted[base] < _CAP:
                     emitted[base] += 1
                     out.append(make_finding("UNPARSEABLE_VALUE", status=Status.NEEDS_REVIEW, table_id=pair_id, table_name=display,
-                                            approved_ref=ref(t, c), message=f"[{side}] value '{c.raw}' at {c.coord} could not be read as the expected type.",
-                                            explanation="A cell holds text where a number or boolean was expected.", suggested_fix="Correct the cell in the source file."))
+                                            approved_ref=ref(t, c), message=f"[{side}] value '{c.raw}' at {c.coord} could not be read as the expected type.",))
     # strikethrough rows (distinct rows, not cells)
     if side == "approved":
         struck_rows = [r for r in t.rows if r.key and any("STRIKETHROUGH" in c.flags for c in r.key)]
@@ -75,8 +73,7 @@ def integrity_findings(t: RateTable, pair_id: str, display: str, side: str, cfg:
         if counts[fl]:
             out.append(make_finding(fl, severity=Severity(sev), table_id=pair_id, table_name=display,
                                     approved_ref=f"{t.source.file}!{t.source.sheet}!{firsts[fl]}",
-                                    message=f"[{side}] {counts[fl]} {text} (first at {firsts[fl]}).",
-                                    explanation=text.capitalize() + ".", suggested_fix="Check the source cells and confirm the values are intended."))
+                                    message=f"[{side}] {counts[fl]} {text} (first at {firsts[fl]}).",))
     if "MERGED" in counts and "MERGED_KEY_FILLED" not in counts:
         out.append(make_finding("MERGED_FACTOR", status=Status.NEEDS_REVIEW, table_id=pair_id, table_name=display,
                                 message=f"[{side}] merged cells in the data region (factor cells)."))

@@ -223,3 +223,10 @@ def detect_approved_layout(grid: Grid, max_scan: int) -> ApprovedLayout | Layout
         notes.append("Several tables appear to be stacked on this sheet.")
     return ApprovedLayout(header_row=header, data_start=start, data_end=end, skipped_rows=skipped,
                           multiple_tables=multi, notes=notes)
+
+
+def failure_reason(grid: Any, reason: str) -> str:
+    """D-027: an empty tab gets its own plain reason instead of a header-detection message."""
+    if not any(not _empty(v) for row in grid.rows for v in row):
+        return "The tab is empty."
+    return reason

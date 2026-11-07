@@ -80,6 +80,7 @@ class JiraCfg(_Strict):
 
 class TestsCfg(_Strict):
     max_per_table: int = 25
+    max_must_tests: int = Field(default=8, ge=3, le=20)      # D-026: short 'Must Test' list; hard cap 20
 
 
 class Config(_Strict):

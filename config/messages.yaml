@@ -1,38 +1,232 @@
-# rule id -> explain + fix (plain language, no LLM)
-VALUE_MISMATCH: {explain: "The factor in Guidewire differs from the approved value.", fix: "Correct the factor in the rate table to the approved value and re-export."}
-MATCH_ROUNDED: {explain: "Guidewire holds the approved value rounded to the column decimal scale.", fix: "No action needed unless the filing requires more decimal places."}
-PRECISION_TRUNCATION: {explain: "Rounding to the Guidewire column scale changes the approved value by more than the materiality threshold.", fix: "Increase the column scale in Guidewire or confirm the rounding with actuarial."}
-ORDER_OF_MAGNITUDE: {explain: "The Guidewire factor is many times larger or smaller than approved, which usually means a decimal point or unit error.", fix: "Check for a misplaced decimal point or percent/unit conversion and reload the value."}
-TRANSPOSITION: {explain: "The digits of the Guidewire factor are the approved digits in a different order.", fix: "Re-key the value from the approved workbook."}
-SIGN_FLIP: {explain: "The Guidewire factor has the opposite sign to the approved factor.", fix: "Correct the sign and re-export."}
-MISSING_ROW_IN_EXPORT: {explain: "An approved row is not present in the Guidewire table.", fix: "Add the missing row to the rate table."}
-EXTRA_ROW_IN_EXPORT: {explain: "Guidewire holds a row that is not in the approved table.", fix: "Remove the row, or ask product/actuarial whether the approved file is incomplete."}
-WILDCARD_MISMATCH: {explain: "A wildcard (applies-to-all) value in one source is a concrete value in the other.", fix: "Align the row with the approved wildcard or concrete value."}
-BLANK_FACTOR: {explain: "A factor cell is blank where a value is required. Blanks loaded instead of wildcards have caused production defects.", fix: "Enter the approved factor; do not leave factors blank."}
-TABLE_MISSING_IN_EXPORT: {explain: "An approved table was not found in the Guidewire export.", fix: "Load the table into the rate book or confirm the table mapping."}
-APPROVED_FILE_MISSING_TABLE: {explain: "The Jira story lists a table that is not in the approved workbook.", fix: "Obtain the approved table from actuarial/product."}
-UNDOCUMENTED_APPROVED_TABLE: {explain: "The approved workbook has a table that the Jira story does not mention.", fix: "Confirm the table is intended and update the story."}
-UNDECLARED_CHANGE: {explain: "A table changed versus the baseline but is not in the Jira story or approved workbook.", fix: "Revert the change or document it in the story."}
-MISSING_UPDATE: {explain: "The story declares an update but the table is unchanged versus the baseline.", fix: "Load the approved changes into the table."}
-BYPASS_VIOLATION: {explain: "A table marked bypass/do-not-load in Jira has changed.", fix: "Revert the table to the baseline edition."}
-REMOVE_NOT_APPLIED: {explain: "Jira says to remove the table but it still exists unchanged.", fix: "Remove the table from the rate book."}
-APPROVED_ROW_UNCHANGED: {explain: "An approved row equals the baseline value, i.e. approved says no change.", fix: "Check the approved file is the latest version."}
-RANGE_GAP: {explain: "There is a gap between two consecutive bands.", fix: "Correct the band boundaries so bands are contiguous."}
-RANGE_OVERLAP: {explain: "Two bands overlap.", fix: "Correct the band boundaries so bands do not overlap."}
-RANGE_MIN_GT_MAX: {explain: "A band minimum is greater than its maximum.", fix: "Correct the band boundaries."}
-OPEN_END_MISSING: {explain: "The last band has no maximum and is not open-ended by convention.", fix: "Confirm whether the top band should be open-ended."}
-OFF_BY_ONE_BOUNDARY: {explain: "A band boundary is shifted by exactly one versus the approved band.", fix: "Correct the boundary; this changes which risks get this factor."}
-EFFECTIVE_DATE_MISMATCH: {explain: "The export effective date differs from the filing effective date in Jira.", fix: "Correct the rate book effective date."}
-SCOPE_METADATA_MISMATCH: {explain: "The export jurisdiction or line of business differs from Jira.", fix: "Check that you exported the right rate book."}
-EDITION_NOT_INCREMENTED: {explain: "Edition did not change although the story declares changes.", fix: "Create a new edition for the change."}
-DUPLICATE_KEY: {explain: "Two rows share the same key.", fix: "Remove or correct the duplicate row."}
-FORMULA_NO_VALUE: {explain: "A formula cell has no cached value so the approved number cannot be known.", fix: "Open the workbook in Excel, recalculate, save, and re-run."}
-EXCEL_ERROR: {explain: "A cell holds an Excel error value.", fix: "Fix the source cell in the workbook."}
-APPROVED_TABLE_SUSPICIOUSLY_SMALL: {explain: "The approved table has far fewer rows than the Guidewire table; it may be a partial paste or a wrong mapping.", fix: "Confirm the approved tab holds the whole table."}
-STRIKETHROUGH_ROW: {explain: "A row or cell is struck through in the approved workbook.", fix: "Confirm whether the row should be deleted."}
-NEEDS_MAPPING: {explain: "The tool could not confidently match this table.", fix: "Run `rgl map` to confirm the mapping."}
-SUGGESTED_MAPPING: {explain: "The tool matched this table by similarity; it is not yet confirmed.", fix: "Confirm the mapping with `rgl review`."}
-JIRA_CONFLICT: {explain: "The Jira story gives conflicting actions for the same table.", fix: "Clarify the intended action in the story."}
-JIRA_UNPARSED: {explain: "A line mentions tables or dates but the tool could not interpret it.", fix: "Review the line manually or teach the pattern with `rgl review`."}
-NOT_EVALUATED_NO_BASELINE: {explain: "No baseline exists so changes to other tables were not checked.", fix: "Use --baseline, or accept this run as a snapshot so the next run has one."}
-OUT_OF_SCOPE_TABLE_DATED: {explain: "A table outside the approved workbook and the Jira story carries this filing's effective date or edition, so it may have been loaded or edited by mistake.", fix: "Confirm with the developer whether the table was meant to change; if so, add it to the story and the approved workbook, otherwise restore its previous date and edition."}
+# Plain-language messages (D-027). Every finding type has three parts:
+#   what   - what we found (one sentence)
+#   why    - why it matters (one sentence about the business impact)
+#   action - what to do (one concrete step)
+# Write for a QA analyst or actuary: short sentences, no internal jargon, no rule IDs.
+# Placeholders: {where} {table} {key} {column} {approved} {export} {numbers} {change} {charged} {who} {approved_cell} {export_cell} {rows}
+# Technical detail (rule ID, raw values, cell references) is added by the reports in a separate "Technical details" place.
+
+VALUE_MISMATCH:
+  what: "{where}: the {column} value in PolicyCenter is not the approved value. {numbers}"
+  why: "{who} will be {charged}."
+  action: "Change the value in PolicyCenter to {approved} and export the rate book again."
+MATCH_ROUNDED:
+  what: "{where}: PolicyCenter holds {export}, which is the approved {approved} rounded to the decimals the column allows."
+  why: "The premium effect is tiny and comes only from rounding."
+  action: "No action needed, unless the filing requires more decimal places."
+PRECISION_TRUNCATION:
+  what: "{where}: PolicyCenter rounds the approved {approved} to {export}, which is a bigger change than the tool allows."
+  why: "{who} will be {charged} by a small amount on every quote."
+  action: "Ask your admin to allow more decimal places for this column, or confirm the rounding with the actuary."
+ORDER_OF_MAGNITUDE:
+  what: "{where}: PolicyCenter has {export} but {approved} was approved. The two numbers are many times apart."
+  why: "{who} will be {charged} by a large amount. This is often a misplaced decimal point."
+  action: "Check the decimal point and the units (for example 1.05 versus 105%), then load the approved value again."
+TRANSPOSITION:
+  what: "{where}: PolicyCenter has {export} but {approved} was approved. The same digits are in a different order."
+  why: "{who} will be {charged}."
+  action: "Type the value again from the approved workbook ({approved_cell}) and export again."
+SIGN_FLIP:
+  what: "{where}: PolicyCenter has {export} but {approved} was approved. The plus or minus sign is the other way round."
+  why: "The premium moves in the wrong direction for {who}."
+  action: "Fix the sign in PolicyCenter and export again."
+MISSING_ROW_IN_EXPORT:
+  what: "{where} is in the approved file but missing from PolicyCenter."
+  why: "Quotes that need this row may fail or pick the wrong rate."
+  action: "Add the missing row to the table in PolicyCenter."
+EXTRA_ROW_IN_EXPORT:
+  what: "{where} is in PolicyCenter but is not in the approved file."
+  why: "Quotes that use this row would get a rate nobody approved."
+  action: "Remove the extra row, or ask the actuary whether the approved file is out of date."
+WILDCARD_MISMATCH:
+  what: "{where}: one file says 'any value' where the other has a specific value. Approved: {approved}. PolicyCenter: {export}."
+  why: "Policies that do not match the listed value may get the wrong rate, or no rate."
+  action: "Make PolicyCenter match the approved row, using 'any value' only where the approved file does."
+BLANK_FACTOR:
+  what: "{where}: the {column} cell is blank."
+  why: "A blank can be read as zero or as 'any value', so the premium could be wrong."
+  action: "Enter the approved value. Do not leave factor cells blank."
+TABLE_MISSING_IN_EXPORT:
+  what: "{table} is in the approved file, but PolicyCenter has no matching table."
+  why: "Nothing in this table was checked, and quotes may still use the old rates."
+  action: "Load the table into the rate book, or check whether it was exported under a different name."
+APPROVED_FILE_MISSING_TABLE:
+  what: "The story says to change {table}, but that table is not in the approved workbook."
+  why: "We cannot check a change that has no approved values."
+  action: "Get the approved table from the actuary and add it to the workbook, or correct the story."
+UNDOCUMENTED_APPROVED_TABLE:
+  what: "{table} is in the approved workbook, but the story does not mention it."
+  why: "A change may be going in that nobody planned to test."
+  action: "Confirm the table should change, then add it to the story."
+UNDECLARED_CHANGE:
+  what: "{table} is different from the 'before' export, but it is not in the story or the approved workbook."
+  why: "A rate change nobody approved could reach customers."
+  action: "Undo the change, or add it to the story and get it approved."
+MISSING_UPDATE:
+  what: "The story says {table} changes, but it is the same as in the 'before' export."
+  why: "The new rates are not in PolicyCenter, so customers keep paying the old rates."
+  action: "Load the approved changes into this table and export again."
+BYPASS_VIOLATION:
+  what: "The story says not to touch {table}, but it changed."
+  why: "A table that should stay the same now gives different rates."
+  action: "Put the table back the way it was in the 'before' export."
+REMOVE_NOT_APPLIED:
+  what: "The story says to remove {table}, but it is still there and unchanged."
+  why: "The old rates stay in use."
+  action: "Remove the table from the rate book."
+APPROVED_ROW_UNCHANGED:
+  what: "The approved {table} is the same as the 'before' export."
+  why: "The story says this table changes, yet nothing is different."
+  action: "Check that you have the latest approved file."
+RANGE_GAP:
+  what: "{where}: there is a gap between two bands."
+  why: "A value that falls in the gap gets no rate."
+  action: "Correct the band limits so each band starts where the one before it ends."
+RANGE_OVERLAP:
+  what: "{where}: two bands overlap."
+  why: "A value in both bands could get either rate."
+  action: "Correct the band limits so bands do not overlap."
+RANGE_MIN_GT_MAX:
+  what: "{where}: a band starts higher than it ends."
+  why: "No value can fall in this band, so it is never used."
+  action: "Correct the lower and upper limits of the band."
+OPEN_END_MISSING:
+  what: "{where}: the top band has an upper limit."
+  why: "A value above the top limit may get no rate, or an error."
+  action: "Check whether the top band should have no upper limit."
+OFF_BY_ONE_BOUNDARY:
+  what: "{where}: a band limit is off by one. Approved {approved}, PolicyCenter {export}."
+  why: "Policies right at the edge of the band get the wrong rate."
+  action: "Correct the band limit to match the approved file."
+EFFECTIVE_DATE_MISMATCH:
+  what: "The effective date in PolicyCenter is {export}, but the approved date is {approved}."
+  why: "Policies could get the new rates on the wrong dates."
+  action: "Correct the effective date to {approved} and export again."
+EFFECTIVE_DATE_NOT_EVALUATED:
+  what: "We could not check the rate book effective date."
+  why: "A wrong date would change which policies get the new rates."
+  action: "Add 'Filing Effective Date: MM/DD/YYYY' to the story, then run again."
+SCOPE_METADATA_MISMATCH:
+  what: "The export is for {export}, but the story says {approved}."
+  why: "You may have exported the wrong rate book."
+  action: "Export the correct rate book, or correct the story."
+EDITION_NOT_INCREMENTED:
+  what: "The edition is still {export}, the same as before, even though the story has changes."
+  why: "New rates can overwrite the old ones, so older policies could be rated wrong."
+  action: "Create a new edition for this change and export again."
+EDITION_MISMATCH:
+  what: "The export is edition {export}, but the story names edition {approved}."
+  why: "QA may be testing the wrong rate book."
+  action: "Export the right edition, or correct the story."
+DUPLICATE_KEY:
+  what: "{where} appears more than once."
+  why: "The system may pick either row, so the rate can change from quote to quote."
+  action: "Delete the duplicate row, or correct its values."
+FORMULA_NO_VALUE:
+  what: "A cell in {table} ({approved_cell}) is a formula with no saved result."
+  why: "We cannot read the approved number, so it was not checked."
+  action: "Open the workbook in Excel, let it recalculate, save it, and run again."
+EXCEL_ERROR:
+  what: "A cell in {table} ({approved_cell}) shows an Excel error."
+  why: "We cannot read the approved number, so it was not checked."
+  action: "Fix the cell in the workbook and run again."
+APPROVED_TABLE_SUSPICIOUSLY_SMALL:
+  what: "The approved {table} has {approved} rows, but PolicyCenter has {export}."
+  why: "Part of the approved table may be missing, so many rows were not checked."
+  action: "Check that the approved tab holds the whole table."
+STRIKETHROUGH_ROW:
+  what: "Some rows in {table} are crossed out in the approved workbook."
+  why: "We cannot be sure whether those rows should be removed."
+  action: "Ask the actuary whether the crossed-out rows should be removed."
+NEEDS_MAPPING:
+  what: "We could not match {table} to a table in PolicyCenter."
+  why: "Until it is matched, this table cannot be checked."
+  action: "Run `rgl map` and pick the right table."
+SUGGESTED_MAPPING:
+  what: "We matched {table} to a PolicyCenter table because the names look alike. Nobody has confirmed this yet."
+  why: "If the match is wrong, the wrong table is being checked."
+  action: "Confirm the match with `rgl review`."
+JIRA_CONFLICT:
+  what: "The story gives two different instructions for {table}."
+  why: "We cannot tell what should happen to this table."
+  action: "Change the story so it gives one clear instruction."
+JIRA_REVIEW:
+  what: "The story is unclear in one place."
+  why: "We may have read it differently from what the author meant."
+  action: "Read the story again and make that part clearer."
+JIRA_UNPARSED:
+  what: "We could not understand a line in the story that mentions tables or dates."
+  why: "A table or a date may have been skipped."
+  action: "Check that line in the story, or teach the tool the wording with `rgl review`."
+NOT_EVALUATED_NO_BASELINE:
+  what: "We did not check tables outside this change, because no 'before' export was provided."
+  why: "A change to another table that nobody planned would not be seen."
+  action: "Run again with --baseline pointing to the export from before the change."
+OUT_OF_SCOPE_TABLE_DATED:
+  what: "{table} is not part of this change, but its date or edition matches this filing."
+  why: "It may have been changed or loaded by mistake."
+  action: "Ask the developer whether it should change. If yes, add it to the story and the approved file. If not, put back its old date and edition."
+AMBIGUOUS_DATE:
+  what: "A date in {table} ({approved_cell}) can be read in two ways, for example 3/4 as March 4 or April 3."
+  why: "A wrong reading moves the date by months."
+  action: "Write the date as YYYY-MM-DD in the source file."
+UNPARSEABLE_VALUE:
+  what: "A cell in {table} ({approved_cell}) holds text where a number was expected."
+  why: "We could not compare this value."
+  action: "Correct the cell in the source file."
+MERGED_FACTOR:
+  what: "Some factor cells in {table} are merged."
+  why: "Merged cells hide which row a value belongs to."
+  action: "Unmerge the cells and fill in each one."
+HIDDEN_SHEET:
+  what: "A hidden tab ({table}) was found and not used."
+  why: "If it holds approved values, they were not checked."
+  action: "Unhide the tab if it holds approved data, then run again."
+HIDDEN_ROW:
+  what: "Some rows in {table} are hidden. We included them in the check."
+  why: "People reading the file may not see these rows."
+  action: "Check that the hidden rows are meant to be there."
+HIDDEN_COL:
+  what: "Some columns in {table} are hidden. We included them in the check."
+  why: "People reading the file may not see these columns."
+  action: "Check that the hidden columns are meant to be there."
+MERGED_KEY_FILLED:
+  what: "Merged cells in {table} were filled down so each row has its own value."
+  why: "If the merge was not meant that way, some rows may be matched wrongly."
+  action: "Check the merged cells in the source file."
+POSSIBLE_LEADING_ZERO_LOSS:
+  what: "Some codes in {table} look like numbers and may have lost leading zeros (for example 0123 became 123)."
+  why: "A code with a missing zero will not match the right row."
+  action: "Format the column as text in the source file."
+DATE_HAS_TIME:
+  what: "Some dates in {table} also carry a time of day."
+  why: "A time can move a date to the day before or after."
+  action: "Remove the time from the date cells."
+FORMULA_CACHED:
+  what: "Some cells in {table} are formulas. We used the last saved result."
+  why: "If the workbook was not recalculated, the saved result could be old."
+  action: "No action needed if the workbook was saved after its last change."
+PERCENT_SIGN_IGNORED:
+  what: "Some cells in {table} have a percent sign. We ignored the sign and read the number."
+  why: "A value like 5% could be read as 5 instead of 0.05."
+  action: "Check that those values are on the scale you expect."
+VBA_PRESENT:
+  what: "A workbook contains macros. They were never opened or run."
+  why: "Anything a macro would calculate is not part of this check."
+  action: "No action needed."
+INPUT_WARNING:
+  what: "Something unusual was found in an input file."
+  why: "It may affect how well the file could be read."
+  action: "Read the note in the technical details and check the file."
+INPUT_INFO:
+  what: "There is a note about an input file."
+  why: "It is for your information."
+  action: "No action needed."
+TABLE_NOTE:
+  what: "There is a note about how {table} was read."
+  why: "It is for your information."
+  action: "No action needed."
+LOB_UNRESOLVED:
+  what: "The story does not name a line of business, so we used the one in the export."
+  why: "The line of business decides which table numbers and names apply."
+  action: "Add 'LOB: XXX' to the story, or pass --lob."

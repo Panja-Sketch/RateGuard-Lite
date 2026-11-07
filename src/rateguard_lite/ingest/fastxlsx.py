@@ -58,8 +58,8 @@ class FastWorkbookReader:
             self._shared = self._read_shared_strings()
             self._date_styles = self._read_styles()
         except (zipfile.BadZipFile, etree.XMLSyntaxError, KeyError) as exc:
-            raise UnsafeInputError(f"Workbook could not be read: {type(exc).__name__}.", where=self.path.name,
-                                   next_step="Open it in Excel and re-save as a plain .xlsx.") from exc
+            raise UnsafeInputError(f"We couldn't read {self.path.name}. It may be damaged or in an unexpected format.", where=self.path.name,
+                                   next_step="Open it in Excel, save a fresh copy as .xlsx, and run again.") from exc
         self._cells_read = 0
 
     def close(self) -> None:
@@ -171,9 +171,9 @@ class FastWorkbookReader:
                 rows.append(tuple(vals))
                 self._cells_read += len(vals)
                 if self._cells_read > max_cells:
-                    raise UnsafeInputError(f"Workbook exceeds the {max_cells:,}-cell limit.",
+                    raise UnsafeInputError(f"{self.path.name} is too big: it has more than {max_cells:,} cells.",
                                            where=f"{self.path.name}!{name}",
-                                           next_step="Split the workbook or raise limits.max_cells (hard max 10,000,000).")
+                                           next_step="Split the workbook, or ask your admin to raise limits.max_cells (the most allowed is 10,000,000).")
                 row.clear()
         while rows and all(v is None or (isinstance(v, str) and not v.strip()) for v in rows[-1]):
             rows.pop()

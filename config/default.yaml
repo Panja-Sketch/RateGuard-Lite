@@ -32,3 +32,4 @@ jira:
     endpoint: "http://127.0.0.1:11434"
 tests:
   max_per_table: 25
+  max_must_tests: 8       # D-026/D-028: most tests in the short 'Must Test' list (3-20)

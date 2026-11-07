@@ -21,6 +21,9 @@ class TestSuite:
     parameter: list[dict[str, Any]] = field(default_factory=list)
     transaction: list[dict[str, Any]] = field(default_factory=list)
     assumptions: list[str] = field(default_factory=list)
+    must: list[dict[str, Any]] = field(default_factory=list)           # D-026: short, ranked 'Must Test' list
+    candidates: list[dict[str, Any]] = field(default_factory=list)     # D-026: every scored candidate ('All Candidates')
+    mode: str = "must"
 
 
 def _tid(prefix: str, *parts: str) -> str:
@@ -222,4 +225,8 @@ def generate_tests(res: RunResult) -> TestSuite:
             continue
         suite.transaction.append({"test_id": tid, "priority": pr, "transaction": tx, "policy_effective_date": eff,
                                   "expected_rate_book": exp, "what_to_check": chk})
+    from .must import build_must
+
+    suite.mode = getattr(res, "tests_mode", "must")
+    build_must(res, suite)
     return suite

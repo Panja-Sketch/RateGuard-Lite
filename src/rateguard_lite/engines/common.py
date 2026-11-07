@@ -7,18 +7,15 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any
 
-from ..config import aux
 from ..model.core import CellValue, RateTable, Row
 from ..model.findings import Finding, Severity, Status
+from ..plain import apply_plain
 
 KeyT = tuple[tuple[str, str | None], ...]
 
 
 def make_finding(rule_id: str, *, severity: Severity | None = None, status: Status | None = None, **kw: Any) -> Finding:
-    msgs = aux("messages").get(rule_id, {})
-    kw.setdefault("explanation", msgs.get("explain", ""))
-    kw.setdefault("suggested_fix", msgs.get("fix", ""))
-    return Finding(rule_id=rule_id, severity=severity, status=status, **kw)
+    return apply_plain(Finding(rule_id=rule_id, severity=severity, status=status, **kw))
 
 
 def ref(t: RateTable, cell: CellValue | None) -> str:

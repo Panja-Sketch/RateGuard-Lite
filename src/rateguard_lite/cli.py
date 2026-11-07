@@ -92,13 +92,17 @@ def run(
     overwrite: Annotated[bool, typer.Option("--overwrite")] = False,
     debug: Annotated[bool, typer.Option("--debug")] = False,
     accept_snapshot: Annotated[bool, typer.Option("--accept-snapshot", help="Opt in: save this export in Snapshot History as the accepted state (next run's baseline) if it passes")] = False,
+    tests: Annotated[str, typer.Option("--tests", help="'must' (default): short ranked Must Test list. 'full': also write the earlier long test lists")] = "must",
 ) -> None:
     """Reconcile an implemented rate book against the approved workbook and the Jira story."""
     from .pipeline import RunOptions, run_reconciliation
     from .report.writer import verdict_text
+    if tests not in ("must", "full"):
+        _fail(RGLError("--tests must be 'must' or 'full'.", next_step="Use --tests must (short list) or --tests full (all candidates and the long lists)."), debug)
+        return
     try:
         with _status("[bold]Starting...") as st:
-            res = run_reconciliation(RunOptions(approved, jira, export, out, baseline, lob, state, profile, user, overwrite, debug, accept_snapshot),
+            res = run_reconciliation(RunOptions(approved, jira, export, out, baseline, lob, state, profile, user, overwrite, debug, accept_snapshot, tests=tests),
                                      progress=(lambda m: st.update(f"[bold]{m}...")) if st is not None else None)
     except Exception as exc:  # noqa: BLE001
         _fail(exc, debug)
@@ -125,17 +129,17 @@ def _print_result(res: Any, text: str) -> None:
     console.print(f"  [dim]{s['scope_check']}[/dim]")
     console.print()
     console.print(f"  [bold]{s['tables_analyzed']}[/bold] tables analyzed  [green]{s['tables_matched']} matched[/green]  "
-                  f"[red]{s['tables_with_discrepancies']} with discrepancies[/red]  [red]{s['scope_violations']} scope violation(s)[/red]")
+                  f"[red]{s['tables_with_discrepancies']} with differences[/red]  [red]{s['scope_violations']} scope violation(s)[/red]")
     console.print(f"  [bold]{s['cells_compared']:,}[/bold] cells compared  [red]{s['critical']} critical[/red]  [dark_orange]{s['high']} high[/dark_orange]  "
                   f"[yellow]{s['warnings']} warning(s)[/yellow]  {s['rounded_matches']} rounded match(es)")
     console.print()
     shown = [f for f in res.findings if f.level not in ("INFO",)][:12]
     if shown:
-        ft = Table(box=box.SIMPLE_HEAD, title="Top findings")
-        for h in ("Level", "Rule", "Table", "Detail"):
+        ft = Table(box=box.SIMPLE_HEAD, title="What we found")
+        for h in ("Level", "What we found", "What to do"):
             ft.add_column(h, overflow="fold")
         for f in shown:
-            ft.add_row(Text(f.level, style=LEVEL_STYLE.get(f.level, "")), f.rule_id, f.table_name or f.table_id, (f"{f.key}: " if f.key else "") + f.message)
+            ft.add_row(Text(f.level_label, style=LEVEL_STYLE.get(f.level, "")), f.plain_what or f.message, f.plain_action)
         console.print(ft)
         rest = len([f for f in res.findings if f.level != "INFO"]) - len(shown)
         if rest > 0:

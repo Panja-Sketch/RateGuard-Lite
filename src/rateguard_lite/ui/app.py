@@ -19,6 +19,8 @@ from rateguard_lite.learning.review import apply_decision, describe
 from rateguard_lite.learning.store import LearningStore
 from rateguard_lite.model.findings import GATE_TEXT, Verdict
 from rateguard_lite.pipeline import RunOptions, run_reconciliation
+from rateguard_lite.plain import pretty_key, technical_details
+from rateguard_lite.report.writer import HOW_TO_READ
 from rateguard_lite.snapshots.store import SnapshotStore
 
 install_socket_guard()
@@ -123,24 +125,33 @@ with tab_run:
         m = st.columns(6)
         m[0].metric("Tables analyzed", s["tables_analyzed"])
         m[1].metric("Matched", s["tables_matched"])
-        m[2].metric("Discrepancies", s["tables_with_discrepancies"])
+        m[2].metric("With differences", s["tables_with_discrepancies"])
         m[3].metric("Scope violations", s["scope_violations"])
         m[4].metric("Cells compared", f"{s['cells_compared']:,}")
         m[5].metric("Rounded matches", s["rounded_matches"])
+        musts = list(getattr(res.tests, "must", []))
         st.caption(f"Rate book {s['rate_book'] or '-'} · edition {s['export_edition'] or '-'} · filing {s['filing_effective_date'] or '-'} · baseline: {s['baseline']}")
-        rows = [{"Level": f.level, "Rule": f.rule_id, "Table": f.table_name or f.table_id, "Key": f.key, "Column": f.column, "Approved": f.approved_value,
-                 "Export": f.export_value, "Detail": f.message, "Suggested fix": f.suggested_fix} for f in res.findings if f.level != "INFO"]
+        with st.expander("How to read this report", expanded=False):
+            st.markdown("\n".join(f"- {line}" for line in HOW_TO_READ))
+        rows = [{"Level": f.level_label, "Table": f.table_name or f.table_id, "Where in the table": pretty_key(f.key), "What we found": f.plain_what or f.message,
+                 "Why it matters": f.plain_why, "What to do": f.plain_action, "Technical details": technical_details(f)}
+                for f in res.findings if f.level != "INFO"]
         levels = sorted({r["Level"] for r in rows})
         pick = st.multiselect("Show levels", levels, default=levels)
         if rows:
             st.dataframe([r for r in rows if r["Level"] in pick], width="stretch", hide_index=True)
         else:
-            st.success("No findings. Every approved value landed correctly.")
+            st.success("Nothing to report. Every approved value matches PolicyCenter.")
+        if musts:
+            st.subheader("Must Test: quotes worth running by hand")
+            st.caption("Every table value is already compared cell by cell. These cover what a file comparison cannot prove. Full list: test_scenarios.xlsx > All Candidates.")
+            st.dataframe([{"#": x["priority"], "What to test": x["what"], "Why this matters": x["why"], "How to set up the quote": x["setup"],
+                           "What you should see": x["expect"], "Source": x["source"], "Type": x["category"]} for x in musts], width="stretch", hide_index=True)
         out = Path(st.session_state["out"])
         d = st.columns(5)
         for col, (label, name, mime) in zip(d, [("HTML report", "reconciliation_report.html", "text/html"), ("Excel report", "reconciliation_report.xlsx", "application/vnd.ms-excel"),
                                                 ("JSON", "reconciliation_report.json", "application/json"), ("Jira comment", "jira_comment.txt", "text/plain"),
-                                                ("QA scenarios", "test_scenarios.xlsx", "application/vnd.ms-excel")], strict=True):
+                                                ("Must Test list", "test_scenarios.xlsx", "application/vnd.ms-excel")], strict=True):
             f = out / name
             if f.exists():
                 col.download_button(label, f.read_bytes(), file_name=name, mime=mime, width="stretch")

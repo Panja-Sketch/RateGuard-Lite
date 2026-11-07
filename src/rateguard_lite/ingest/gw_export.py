@@ -13,7 +13,7 @@ from ..mapping.identity import canonical_id
 from ..model.core import ColumnType, RateBook, RateTable
 from .approved import META_SHEETS
 from .fastxlsx import FastWorkbookReader
-from .layout import GwLayout, detect_gw_layout, parse_type_token
+from .layout import GwLayout, detect_gw_layout, failure_reason, parse_type_token
 from .result import IngestResult, SheetIssue
 from .tablebuild import build_table, map_type
 
@@ -53,7 +53,7 @@ def ingest_export(
                 if s.name.strip().upper() in META_SHEETS:
                     unmapped.append(s.name)
                 else:
-                    res.issues.append(SheetIssue(path.name, s.name, "NEEDS_MAPPING", lay.reason))
+                    res.issues.append(SheetIssue(path.name, s.name, "NEEDS_MAPPING", failure_reason(g, lay.reason)))
                     unmapped.append(s.name)
                 continue
             md = dict(lay.metadata)

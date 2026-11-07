@@ -14,6 +14,20 @@ from .common import make_finding
 NON_UPDATE = {"BYPASS", "REMOVE", "MENTION", "CONFLICT"}
 
 
+def _plain_reason(reason: str) -> str:
+    """Turn a layout failure into a sentence a QA analyst can act on (D-027)."""
+    r = reason.lower()
+    if "empty" in r and "header" not in r:
+        return "The tab has nothing in it."
+    if "header" in r and ("could not find" in r or "empty" in r or "too low" in r or "plausible" in r):
+        return "We couldn't find the column headers."
+    if "data-type row" in r:
+        return "We couldn't find the row that lists the column types (for example DECIMAL or STRING)."
+    if "more than one" in r or "several tables" in r:
+        return "More than one table was found for the same name."
+    return "The layout of the tab is not what we expected."
+
+
 def scope_findings(mapping: MappingResult, jira: JiraScope, approved_ing: IngestResult, export_ing: IngestResult) -> list[Finding]:
     out: list[Finding] = []
     for p in mapping.pairs:
@@ -51,19 +65,20 @@ def scope_findings(mapping: MappingResult, jira: JiraScope, approved_ing: Ingest
                                     table_name=r.table_name or "",
                                     message=f"Jira line {r.line_no} declares '{r.action.value}' for a table found in neither the approved workbook nor the export: {r.raw_text[:80]}"))
     for flag in jira.review_flags:
-        out.append(make_finding("JIRA_CONFLICT" if flag.startswith("JIRA_CONFLICT") else "JIRA_REVIEW", status=Status.NEEDS_REVIEW, message=flag,
-                                explanation="The Jira story is ambiguous or contradictory.", suggested_fix="Clarify the story and re-run."))
+        out.append(make_finding("JIRA_CONFLICT" if flag.startswith("JIRA_CONFLICT") else "JIRA_REVIEW", status=Status.NEEDS_REVIEW, message=flag))
     for sig in jira.unparsed_signals:
         out.append(make_finding("JIRA_UNPARSED", status=Status.NEEDS_REVIEW, message=sig))
     for ing, side in ((approved_ing, "approved"), (export_ing, "export")):
         for iss in ing.issues:
             if iss.status == "NEEDS_MAPPING":
                 out.append(make_finding("NEEDS_MAPPING", status=Status.NEEDS_MAPPING, table_id=iss.sheet, table_name=iss.sheet,
-                                        message=f"[{side}] {iss.file}!{iss.sheet}: {iss.reason}"))
+                                        message=f"[{side}] {iss.file}!{iss.sheet}: {iss.reason}",
+                                        plain_what=f"We couldn't read the table on tab '{iss.sheet}' in {iss.file}. {_plain_reason(iss.reason)}",
+                                        plain_why="Until it can be read, none of its values are checked.",
+                                        plain_action="Run `rgl inspect` on this file, or ask your admin to update the layout settings."))
             elif iss.status == "HIDDEN":
                 out.append(make_finding("HIDDEN_SHEET", severity=Severity.WARNING, table_id=iss.sheet, table_name=iss.sheet,
-                                        message=f"[{side}] {iss.file}!{iss.sheet}: {iss.reason}",
-                                        explanation="A hidden sheet was found and not used.", suggested_fix="Unhide it if it holds approved data, then re-run."))
+                                        message=f"[{side}] {iss.file}!{iss.sheet}: {iss.reason}"))
     return out
 
 

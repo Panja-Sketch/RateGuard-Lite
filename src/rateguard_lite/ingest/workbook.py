@@ -87,9 +87,9 @@ class WorkbookReader:
             )
         except Exception as exc:  # noqa: BLE001 - corrupt files raise assorted types
             raise UnsafeInputError(
-                f"Workbook could not be opened: {type(exc).__name__}.",
+                f"We couldn't open {self.path.name}. It may be damaged or in an unexpected format.",
                 where=self.path.name,
-                next_step="Open it in Excel and re-save as a plain .xlsx.",
+                next_step="Open it in Excel, save a fresh copy as .xlsx, and run again.",
             ) from exc
         self._cells_read = 0
 
@@ -146,9 +146,9 @@ class WorkbookReader:
             self._cells_read += len(row)
             if self._cells_read > self.limits.max_cells:
                 raise UnsafeInputError(
-                    f"Workbook exceeds the {self.limits.max_cells:,}-cell limit.",
+                    f"{self.path.name} is too big: it has more than {self.limits.max_cells:,} cells.",
                     where=f"{self.path.name}!{name}",
-                    next_step="Split the workbook or raise limits.max_cells (hard max 10,000,000).",
+                    next_step="Split the workbook, or ask your admin to raise limits.max_cells (the most allowed is 10,000,000).",
                 )
         # trim trailing fully-empty rows
         while rows and all(v is None or (isinstance(v, str) and not v.strip()) for v in rows[-1]):

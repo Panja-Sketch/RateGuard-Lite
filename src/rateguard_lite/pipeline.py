@@ -31,6 +31,7 @@ from .learning.store import LearningStore, current_user
 from .mapping.tables import MappingResult, harmonize_types, map_tables
 from .model.findings import GATE_TEXT, Finding, Severity, Status, Verdict
 from .model.report import InputRef, Report
+from .plain import BASELINE_DONE_LINE, NO_BASELINE_LINE
 from .snapshots.store import SnapshotStore, book_key
 from .verdict import EXIT_BY_VERDICT, decide
 
@@ -38,8 +39,8 @@ log = logging.getLogger("rgl")
 SCOPE_RULES = {"BYPASS_VIOLATION", "UNDECLARED_CHANGE", "MISSING_UPDATE", "REMOVE_NOT_APPLIED", "APPROVED_FILE_MISSING_TABLE",
                "TABLE_MISSING_IN_EXPORT"}
 DECLARED = {"ADD", "MODIFY", "REPLACE"}
-SCOPE_CHECK_SKIPPED = "Scope check (tables outside approved/Jira): not performed – no baseline provided"
-SCOPE_CHECK_DONE = "Scope check (tables outside approved/Jira): performed against {b}"
+SCOPE_CHECK_SKIPPED = NO_BASELINE_LINE                 # D-027 wording
+SCOPE_CHECK_DONE = BASELINE_DONE_LINE
 
 
 @dataclass
@@ -57,6 +58,7 @@ class RunOptions:
     debug: bool = False
     accept_snapshot: bool = False
     write_reports: bool = True
+    tests: str = "must"            # D-026: 'must' (short list, default) or 'full' (also the earlier long lists)
 
 
 @dataclass
@@ -91,6 +93,8 @@ class RunResult:
     learned_version: str = "0"
     lob: str = ""
     check_notes: dict[str, Any] = field(default_factory=dict)
+    jira_text: str = ""
+    tests_mode: str = "must"
 
     def to_report(self) -> Report:
         return Report(
@@ -108,8 +112,17 @@ class RunResult:
                      for p in self.mapping.pairs if p.approved is not None or p.jira],
             warnings=self.warnings, info=self.info, learned_used=self.learned_used,
             tolerance_overrides=self.tolerance_notes,
-            test_scenarios={"parameter_tests": len(getattr(self.tests, "parameter", [])), "transaction_tests": len(getattr(self.tests, "transaction", []))},
+            test_scenarios={"parameter_tests": len(getattr(self.tests, "parameter", [])), "transaction_tests": len(getattr(self.tests, "transaction", [])),
+                            "must_test_count": len(getattr(self.tests, "must", [])), "all_candidates_count": len(getattr(self.tests, "candidates", [])),
+                            "must_tests": list(getattr(self.tests, "must", []))},
         )
+
+
+def _read_text_safe(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8", errors="ignore")[:200_000]
+    except OSError:
+        return ""
 
 
 def _setup_log(out: Path, debug: bool) -> logging.Handler:
@@ -205,8 +218,7 @@ def run_reconciliation(opts: RunOptions, progress: Callable[[str], None] | None 
 
         findings: list[Finding] = []
         if not (opts.lob or jira.lob):
-            findings.append(make_finding("LOB_UNRESOLVED", status=Status.NEEDS_REVIEW, message=f"No line of business in Jira or --lob; assumed '{lob}' from the export.",
-                                         explanation="The line of business scopes table numbers and aliases.", suggested_fix="Pass --lob or add 'LOB: XXX' to the story."))
+            findings.append(make_finding("LOB_UNRESOLVED", status=Status.NEEDS_REVIEW, message=f"No line of business in Jira or --lob; assumed '{lob}' from the export.",))
         # ---- Engine A + D(boundary)
         say("Comparing factors")
         fres: dict[str, FactorResult] = {}
@@ -235,8 +247,7 @@ def run_reconciliation(opts: RunOptions, progress: Callable[[str], None] | None 
         elif cfg.verdict.require_baseline_for_pass:
             findings.append(make_finding(
                 "NOT_EVALUATED_NO_BASELINE", status=Status.NOT_EVALUATED,
-                message="No baseline available: all approved values were verified, but changes to other tables, bypassed tables and missing updates were not checked.",
-                suggested_fix="Supply --baseline <prior export>. (This profile requires a baseline for a plain PASS: verdict.require_baseline_for_pass.)"))
+                message="No baseline available: all approved values were verified, but changes to other tables, bypassed tables and missing updates were not checked.",))
         s = stage("baseline_delta", s)
 
         # ---- integrity (scope-limited on export side) and range checks
@@ -256,8 +267,7 @@ def run_reconciliation(opts: RunOptions, progress: Callable[[str], None] | None 
             for t in (p.approved, p.export):
                 if t is not None:
                     for w in t.warnings:
-                        findings.append(make_finding("TABLE_NOTE", severity=Severity.INFO, table_id=p.id, table_name=p.display, message=w,
-                                                     explanation="Informational note from reading the table.", suggested_fix="No action needed."))
+                        findings.append(make_finding("TABLE_NOTE", severity=Severity.INFO, table_id=p.id, table_name=p.display, message=w,))
         s = stage("integrity", s)
 
         # ---- Engine C and E
@@ -265,11 +275,9 @@ def run_reconciliation(opts: RunOptions, progress: Callable[[str], None] | None 
         has_changes = any(p.approved is not None for p in pairs) or any(p.jira_action in DECLARED for p in pairs)
         findings += audit_metadata(export_ing.book, approved_ing.book, baseline_book.metadata if baseline_book else None, jira, pairs, cfg, has_changes)
         for w in approved_ing.warnings + export_ing.warnings:
-            findings.append(make_finding("INPUT_WARNING", severity=Severity.WARNING, message=w, explanation="Something unusual was found in an input file.",
-                                         suggested_fix="Review the file; the tool did not follow or execute it."))
+            findings.append(make_finding("INPUT_WARNING", severity=Severity.WARNING, message=w))
         for i in approved_ing.info + export_ing.info:
-            findings.append(make_finding("VBA_PRESENT" if "VBA" in i else "INPUT_INFO", severity=Severity.INFO, message=i,
-                                         explanation="Informational note about an input file.", suggested_fix="No action needed."))
+            findings.append(make_finding("VBA_PRESENT" if "VBA" in i else "INPUT_INFO", severity=Severity.INFO, message=i,))
         oos, oos_notes = out_of_scope_dated(pairs, export_ing.book, jira)
         findings += oos
         check_notes = {"out_of_scope_table_dated": oos_notes}
@@ -331,7 +339,7 @@ def run_reconciliation(opts: RunOptions, progress: Callable[[str], None] | None 
             warnings=approved_ing.warnings + export_ing.warnings, info=approved_ing.info + export_ing.info, proposals=proposals,
             learned_used=learned.used, tolerance_notes=sorted(set(tol_notes)), timings=timings, cfg=cfg, cfg_hash=chash,
             approved_ing=approved_ing, export_ing=export_ing, out=opts.out, user=user, learned_version=learned.version, lob=lob,
-            check_notes=check_notes,
+            check_notes=check_notes, tests_mode=opts.tests, jira_text=_read_text_safe(opts.jira),
         )
         # ---- scenarios
         from .tests_gen.generate import generate_tests

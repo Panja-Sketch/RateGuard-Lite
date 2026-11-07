@@ -14,7 +14,7 @@ from ..guard.safety import safety_gate_workbook, safety_gate_zip
 from ..learning.context import LearnedContext
 from ..mapping.identity import canonical_id
 from ..model.core import RateBook, RateTable
-from .layout import ApprovedLayout, detect_approved_layout, extract_metadata
+from .layout import ApprovedLayout, detect_approved_layout, extract_metadata, failure_reason
 from .result import IngestResult, SheetIssue
 from .tablebuild import build_table
 from .workbook import WorkbookReader
@@ -82,7 +82,7 @@ def ingest_approved(path: Path, cfg: Config, lob: str, learned: LearnedContext |
                     g = rd.grid(s.name)
                     layout = detect_approved_layout(g, cfg.limits.max_header_scan_rows)
                     if not isinstance(layout, ApprovedLayout):
-                        res.issues.append(SheetIssue(display, s.name, "NEEDS_MAPPING", layout.reason))
+                        res.issues.append(SheetIssue(display, s.name, "NEEDS_MAPPING", failure_reason(g, layout.reason)))
                         unmapped.append(f"{display}!{s.name}")
                         continue
                     if layout.multiple_tables:

@@ -58,3 +58,18 @@ Run `rgl inspect Export.xlsx`. It shows, for each sheet, where the tool found th
 ## 6. Exit codes (for scripts)
 
 0 PASS · 1 FAIL · 2 BLOCKED or NEEDS_REVIEW · 3 unsafe or invalid input · 4 internal error · 5 passed with warnings or limitations.
+
+## 7. How to read the messages (plain language)
+
+Every item in the report has three parts: **what we found**, **why it matters**, **what to do**. Technical detail (rule name, raw values, cell locations) is folded under "Technical details" in the HTML report, and has its own column in the Excel report.
+
+**Before and after**
+
+| | Before | After |
+|---|---|---|
+| A wrong factor | `[CRITICAL] 121 BLD Number of Stories — VALUE_MISMATCH: Stories From=4: approved 1.045 vs export 1.025 (-1.9%)` | Table '121 BLD Number of Stories' (Stories From = 4): the Stories Factor value in PolicyCenter is not the approved value. Approved 1.045, PolicyCenter has 1.025 (1.9% lower). **Why it matters:** policies with Stories From = 4 will be undercharged. **What to do:** change the value in PolicyCenter to 1.045 and export the rate book again. |
+| No "before" export | `Scope check (tables outside approved/Jira): not performed – no baseline provided` | We did not check tables outside this change, because no 'before' export was provided. |
+| A password-protected file | `Workbook is encrypted/password-protected (or an old .xls format). Where: export.xlsx` | We couldn't open export.xlsx because it's password-protected (encrypted), or it's an old .xls file. Next: remove the password in Excel, save a plain .xlsx copy, and run again. |
+| Headline | `Do not promote: fix listed items` | Some values in PolicyCenter don't match what was approved. Fix these before QA. |
+
+**The Must Test list.** `test_scenarios.xlsx` opens on **Must Test**: a short list (12 by default) of quotes worth running by hand, most important first. It does not repeat the value checks the tool already did. After a fix, the first rows retest the exact row that was wrong. The **All Candidates** sheet shows every idea the tool scored and why each one was kept or left out. Use `--tests full` for the earlier long lists as well.

@@ -1,10 +1,12 @@
 """Every fixture scenario (spec 17) produces its expected verdict and finding IDs (A1, A3, A8)."""
 
+import html
 import json
 import re
 
 import pytest
 
+from rateguard_lite.plain import NO_BASELINE_LINE
 from rateguard_lite.samples.generator import SCENARIOS
 from rateguard_lite.samples.runner import check, run_scenario
 
@@ -70,14 +72,14 @@ def test_test_scenarios_generated(scenario, tmp_path):
 
 
 def test_no_baseline_default_passes_but_every_report_says_scope_check_not_performed(scenario, tmp_path):      # D-024 (2)
-    line = "Scope check (tables outside approved/Jira): not performed – no baseline provided"
+    line = NO_BASELINE_LINE
     sc = scenario("no_baseline_default_pass")
     o = run_scenario(sc, tmp_path, write_reports=True)
     assert o.verdict == "PASS" and o.exit_code == 0 and not [f for f in o.result.findings if f.rule_id == "NOT_EVALUATED_NO_BASELINE"]
     out = tmp_path / sc.name
     assert line in (out / "verdict.txt").read_text(encoding="utf-8")
     assert line in (out / "jira_comment.txt").read_text(encoding="utf-8")
-    assert line in (out / "reconciliation_report.html").read_text(encoding="utf-8")
+    assert line in html.unescape((out / "reconciliation_report.html").read_text(encoding="utf-8"))
     data = json.loads((out / "reconciliation_report.json").read_text(encoding="utf-8"))
     assert data["summary"]["scope_check"] == line and data["summary"]["scope_check_performed"] is False
     import openpyxl
@@ -88,7 +90,7 @@ def test_no_baseline_default_passes_but_every_report_says_scope_check_not_perfor
 
 def test_scope_check_line_when_baseline_given(scenario, tmp_path):
     o = run_scenario(scenario("clean_pass"), tmp_path)
-    assert o.result.summary["scope_check_performed"] and "performed against" in o.result.summary["scope_check"]
+    assert o.result.summary["scope_check_performed"] and "also checked tables outside this change" in o.result.summary["scope_check"]
 
 
 def test_out_of_scope_table_dated_details(scenario, tmp_path):                                              # D-024 (3)

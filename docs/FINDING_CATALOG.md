@@ -71,3 +71,27 @@ The plain-language text shown in reports lives in `config/messages.yaml`.
 | `HIDDEN_ROW`, `HIDDEN_COL`, `MERGED_KEY_FILLED`, `POSSIBLE_LEADING_ZERO_LOSS`, `DATE_HAS_TIME`, `PERCENT_SIGN_IGNORED` | WARNING | Formatting quirks that may hide data. |
 | `FORMULA_CACHED`, `TABLE_NOTE`, `VBA_PRESENT`, `INPUT_INFO` | INFO | Informational. |
 | `INPUT_WARNING`, `HIDDEN_SHEET` | WARNING | External links/OLE found; hidden sheet not used. |
+
+## Must Test list (D-026)
+
+The Must Test list is not a set of findings. It is a short, ranked QA script that covers what the cell-by-cell comparison cannot prove.
+
+| Category | Test | Included when |
+|---|---|---|
+| C10 | After the fix, quote the exact row that was wrong | The run found a mismatch (one per mismatched table; always included, ranked first) |
+| C1 | New business the day before the filing date (old rates) and on the filing date (new rates) | Always |
+| C2 | Renewal on or after the filing date picks up new rates | The story mentions renewals or does not limit itself to new business |
+| C3 | Mid-term change on a term that started before the filing date keeps the original rates | Always |
+| C4 | A change with no premium effect leaves premium unchanged | Any table is in scope |
+| C5 | The changed table is really used in rating (row with the biggest % change, else the middle key) | Per changed table |
+| C6 | Range edges (exact boundary value) | Changed or added range tables, bands with the biggest change only |
+| C7 | A value that is not listed, so the catch-all row applies | The table has a wildcard row |
+| C8 | New key or new table | Rows or tables were added |
+| C9 | Same quote in a state or line outside the story is unchanged | Always |
+| C11 | Flat cancellation reverses premium and fees once | The story mentions fees, surcharges or cancellations |
+
+**Score** (higher = test first):
+
+`score = 40 x fix retest (C10) + 25 x date/rate book selection (C1, C2, C3) + 20 x new key or table (C8) + 15 x range edge in a changed band (C6) + 10 x min(1, |change| / 10%) + 10 x wildcard/default row (C7) + 5 x story names the table or feature`
+
+C4, C9 and C11 have no table-specific risk, so they use a fixed base of 15, plus 5 when the story mentions the topic. Only candidates scoring 20 or more reach the Must Test list (fix retests always do), so C4, C9 and C11 appear there only when the story mentions endorsements/policy changes, other states or lines, or cancellations/fees. Ties go to tables named in Jira, then to the stable test ID. At most 2 tests per table (not C10). A quote that proves two things is combined and says so in the Note column of All Candidates. The size is `tests.max_must_tests` (default 8, minimum 3, maximum 20); a list is never padded to reach it.

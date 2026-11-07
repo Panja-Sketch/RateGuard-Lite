@@ -58,6 +58,8 @@ table{width:100%;border-collapse:collapse;background:var(--surface);border:1px s
 th{background:var(--bg);text-align:left;padding:8px 10px;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--line);position:sticky;top:0}
 td{padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
 tr.f{cursor:pointer} tr.f:hover td{background:var(--bg)}
+details.tech{margin-top:6px} details.tech summary{cursor:pointer;color:var(--muted);font-size:12px} details.tech .mono{margin-top:4px;word-break:break-word}
+.howto ul{margin:6px 0 0;padding-left:20px} .howto li{margin:2px 0}
 tr.d td{background:var(--bg);color:var(--muted);font-size:12.5px} tr.d{display:none} tr.d.open{display:table-row}
 .mono{font-family:ui-monospace,Consolas,Menlo,monospace;font-size:12px}
 .muted{color:var(--muted)} .empty{padding:26px;text-align:center;color:var(--muted)}
@@ -90,6 +92,8 @@ footer{margin-top:30px;color:var(--muted);font-size:12px;text-align:center}
     </div>
   </section>
 
+  <section class="card howto"><h2>How to read this report</h2><ul>{% for line in how_to_read %}<li>{{ line }}</li>{% endfor %}</ul></section>
+
   <section class="kpis">
     <div class="kpi"><div class="n">{{ s.tables_analyzed }}</div><div class="t">Tables analyzed</div></div>
     <div class="kpi good"><div class="n">{{ s.tables_matched }}</div><div class="t">Matched cleanly</div></div>
@@ -102,39 +106,39 @@ footer{margin-top:30px;color:var(--muted);font-size:12px;text-align:center}
   {% if steps %}
   <section class="card"><h2>Next steps</h2><ol class="steps">{% for t in steps %}<li>{{ t }}</li>{% endfor %}</ol></section>
   {% elif verdict == 'PASS' %}
-  <section class="card"><h2>Next steps</h2><ol class="steps"><li>Proceed to UAT. Use <b>test_scenarios.xlsx</b> as the targeted QA script.</li></ol></section>
+  <section class="card"><h2>Next steps</h2><ol class="steps"><li>Go ahead with QA testing. The <b>Must Test</b> tab says what to try; <b>test_scenarios.xlsx</b> has the same list.</li></ol></section>
   {% endif %}
 
   <nav class="tabs" role="tablist">
     <button class="on" data-pane="p-find">Findings ({{ findings|length }})</button>
     <button data-pane="p-scope">Scope audit ({{ scope|length }})</button>
     <button data-pane="p-map">Mapping ({{ mapping|length }})</button>
-    <button data-pane="p-tests">QA scenarios ({{ (tests.parameter|length + tests.transaction|length) if tests else 0 }})</button>
+    <button data-pane="p-tests">Must Test ({{ must|length }})</button>
     <button data-pane="p-in">Inputs &amp; notes</button>
   </nav>
 
   <div id="p-find" class="pane on">
     <div class="filters" id="lvlfilters">
       <button class="on" data-lvl="ALL">All</button>
-      {% for l in level_order %}{% if levels[l] %}<button data-lvl="{{ l }}">{{ l.replace('_',' ').title() }} · {{ levels[l] }}</button>{% endif %}{% endfor %}
-      <input type="search" id="q" placeholder="Filter by table, rule, key, value...">
+      {% for l in level_order %}{% if levels[l] %}<button data-lvl="{{ l }}">{{ labels[l] }} · {{ levels[l] }}</button>{% endif %}{% endfor %}
+      <input type="search" id="q" placeholder="Filter by table, value or words...">
     </div>
-    <div class="scroll"><table id="ft"><thead><tr><th>Level</th><th>Rule</th><th>Table</th><th>Key</th><th>Detail</th></tr></thead><tbody>
+    <div class="scroll"><table id="ft"><thead><tr><th>Level</th><th>Table</th><th>Where in the table</th><th>What we found</th></tr></thead><tbody>
       {% for f in findings %}
       <tr class="f" data-lvl="{{ f.level }}">
-        <td><span class="chip l-{{ f.level }}">{{ f.level.replace('_',' ') }}</span></td>
-        <td class="mono">{{ f.rule_id }}</td><td>{{ f.table_name or f.table_id or '-' }}</td><td>{{ f.key or '-' }}</td>
-        <td>{{ f.message }}</td>
+        <td><span class="chip l-{{ f.level }}">{{ f.level_label }}</span></td>
+        <td>{{ f.table_name or f.table_id or '-' }}</td><td>{{ pretty_key(f.key) or '-' }}</td>
+        <td>{{ f.plain_what or f.message }}</td>
       </tr>
-      <tr class="d" data-lvl="{{ f.level }}"><td colspan="5">
-        {% if f.explanation %}<div><b>What it means:</b> {{ f.explanation }}</div>{% endif %}
-        {% if f.suggested_fix %}<div><b>Suggested fix:</b> {{ f.suggested_fix }}</div>{% endif %}
-        {% if f.approved_ref or f.export_ref %}<div class="mono">{{ ref_text(f) }}</div>{% endif %}
+      <tr class="d" data-lvl="{{ f.level }}"><td colspan="4">
+        {% if f.plain_why %}<div><b>Why it matters:</b> {{ f.plain_why }}</div>{% endif %}
+        {% if f.plain_action %}<div><b>What to do:</b> {{ f.plain_action }}</div>{% endif %}
         {% if f.details.get('hint') %}<div><b>Hint:</b> {{ f.details.get('hint') }}</div>{% endif %}
+        <details class="tech"><summary>Technical details</summary><div class="mono">{{ tech(f) }}</div></details>
       </td></tr>
       {% endfor %}
     </tbody></table></div>
-    {% if not findings %}<div class="empty">No findings. Every approved value landed correctly.</div>{% endif %}
+    {% if not findings %}<div class="empty">Nothing to report. Every approved value matches PolicyCenter.</div>{% endif %}
   </div>
 
   <div id="p-scope" class="pane"><div class="scroll"><table><thead><tr><th>Table</th><th>In Jira</th><th>In approved</th><th>In export</th><th>Changed vs baseline</th><th>Mapping</th><th>Status</th></tr></thead><tbody>
@@ -147,12 +151,20 @@ footer{margin-top:30px;color:var(--muted);font-size:12px;text-align:center}
 
   <div id="p-tests" class="pane">
     {% if tests %}
+    <div class="card"><h2>Must Test: the quotes worth running by hand</h2>
+      <p class="muted">Every table value is already compared cell by cell. These tests cover what a file comparison cannot prove, most important first.</p>
+      <div class="scroll"><table><thead><tr><th>#</th><th>What to test</th><th>Why this matters</th><th>How to set up the quote</th><th>What you should see</th><th>Source</th><th>Type</th></tr></thead><tbody>
+      {% for x in must %}<tr><td>{{ x.priority }}</td><td>{{ x.what }}<div class="muted mono">{{ x.test_id }}</div></td><td>{{ x.why }}</td><td>{{ x.setup }}</td><td>{{ x.expect }}</td><td>{{ x.source }}</td><td class="mono">{{ x.category }}</td></tr>{% endfor %}
+      </tbody></table></div>
+      <p class="muted">{{ full_list_line }}</p></div>
+    {% if tests.mode == 'full' %}
     <div class="card"><h2>Transaction &amp; date matrix</h2><div class="scroll"><table><thead><tr><th>ID</th><th>Transaction</th><th>Policy effective</th><th>Expected rate book</th><th>Check</th></tr></thead><tbody>
       {% for x in tests.transaction %}<tr><td class="mono">{{ x.test_id }}</td><td>{{ x.transaction }}</td><td>{{ x.policy_effective_date }}</td><td>{{ x.expected_rate_book }}</td><td>{{ x.what_to_check }}</td></tr>{% endfor %}
     </tbody></table></div></div>
     <div class="card"><h2>Parameter tests ({{ tests.parameter|length }})</h2><div class="scroll"><table><thead><tr><th>ID</th><th>Pri</th><th>Objective</th><th>Table</th><th>Key parameters</th><th>Expected</th></tr></thead><tbody>
       {% for x in tests.parameter[:150] %}<tr><td class="mono">{{ x.test_id }}</td><td>{{ x.priority }}</td><td>{{ x.objective }}</td><td>{{ x.table }}</td><td>{{ x.key_parameters }}</td><td>{{ x.expected_factor }}</td></tr>{% endfor %}
     </tbody></table></div>{% if tests.parameter|length > 150 %}<p class="muted">Showing 150 of {{ tests.parameter|length }}. The full script is in test_scenarios.xlsx.</p>{% endif %}</div>
+    {% endif %}
     <div class="card"><h2>Assumptions</h2><ul>{% for a in tests.assumptions %}<li>{{ a }}</li>{% endfor %}</ul></div>
     {% endif %}
   </div>
