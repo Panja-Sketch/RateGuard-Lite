@@ -30,7 +30,8 @@ The plain-language text shown in reports lives in `config/messages.yaml`.
 | `APPROVED_FILE_MISSING_TABLE` | HIGH | Jira declares a table that is not in the approved workbook. |
 | `UNDOCUMENTED_APPROVED_TABLE` | WARNING | Approved table not mentioned in Jira. |
 | `APPROVED_ROW_UNCHANGED` | INFO | Approved equals baseline (stale approved file?). |
-| `NOT_EVALUATED_NO_BASELINE` | NOT_EVALUATED | No baseline; scope checks skipped. |
+| `NOT_EVALUATED_NO_BASELINE` | NOT_EVALUATED | No baseline; scope checks skipped. Only raised when `verdict.require_baseline_for_pass` is true; otherwise the reports carry the line "Scope check (tables outside approved/Jira): not performed – no baseline provided" and the run can PASS. |
+| `OUT_OF_SCOPE_TABLE_DATED` | NEEDS_REVIEW | An export table outside the approved file and Jira carries the filing effective date or the export's new edition in its own metadata. Skipped (noted in `run_manifest.json`) when the export has no per-table dates or every table has the same stamp. |
 
 ## Mapping and review
 | Rule | Level | Meaning |

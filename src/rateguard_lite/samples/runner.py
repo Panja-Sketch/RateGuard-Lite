@@ -29,20 +29,23 @@ class Outcome:
 
 @contextmanager
 def data_dir_env(path: Path) -> Iterator[None]:
-    old = os.environ.get("RGL_DATA_DIR")
+    """Point the data folder AND the team mappings file at a scratch location (a self-test must never touch the real ones)."""
+    old = {k: os.environ.get(k) for k in ("RGL_DATA_DIR", "RGL_TEAM_MAPPINGS")}
     os.environ["RGL_DATA_DIR"] = str(path)
+    os.environ["RGL_TEAM_MAPPINGS"] = str(path / "team_mappings.yaml")
     path.mkdir(parents=True, exist_ok=True)
     try:
         yield
     finally:
-        if old is None:
-            os.environ.pop("RGL_DATA_DIR", None)
-        else:
-            os.environ["RGL_DATA_DIR"] = old
+        for k, v in old.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
 
 
 def seed_snapshot(baseline: Path) -> None:
-    cfg = load_config()
+    cfg = load_config("snapshots")
     ing = ingest_export(baseline, cfg, "EXPORT", "BOP")
     st = SnapshotStore()
     try:
@@ -60,7 +63,7 @@ def run_scenario(sc: Scenario, work: Path, write_reports: bool = False, **kw: An
             seed_snapshot(sc.baseline)  # type: ignore[arg-type]
         try:
             res = run_reconciliation(RunOptions(
-                approved=sc.approved, jira=sc.jira, export=sc.export, out=out,
+                approved=sc.approved, jira=sc.jira, export=sc.export, out=out, profile=sc.profile,
                 baseline=sc.baseline if sc.use_baseline_flag else None, write_reports=write_reports, user="selftest", **kw))
         except RGLError as exc:
             return Outcome("BLOCKED", exc.exit_code, set(), None, exc.render())

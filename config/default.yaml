@@ -8,8 +8,10 @@ completeness:
   mode: FULL                # only FULL supported in v1
   small_table_ratio: 0.50
 snapshots:
-  enabled: true
+  enabled: false            # opt-in (D-024). Set true, or use --accept-snapshot, to keep a "before" history
   retention_runs: 20
+verdict:
+  require_baseline_for_pass: false   # true = no baseline caps the verdict at PASS_WITH_LIMITATIONS
 dates:
   order: US_MDY
 limits:

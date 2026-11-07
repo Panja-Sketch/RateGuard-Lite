@@ -8,6 +8,7 @@ import subprocess  # noqa: S404 - allowlisted: used only by `rgl ui` to start th
 import sys
 import tempfile
 import traceback
+from contextlib import AbstractContextManager, nullcontext
 from pathlib import Path
 from typing import Annotated, Any, Optional
 
@@ -40,8 +41,25 @@ LEVEL_STYLE = {"BLOCKER": "red", "CRITICAL": "red", "HIGH": "dark_orange", "NEED
                "NOT_EVALUATED": "yellow", "WARNING": "yellow", "INFO": "dim"}
 
 
+def _utf8_streams() -> None:
+    """D-025: never die on a console code page (cp1252) when output is redirected; unencodable characters become '?'."""
+    for stream in (sys.stdout, sys.stderr):
+        reconf = getattr(stream, "reconfigure", None)
+        if reconf is not None:
+            try:
+                reconf(encoding="utf-8", errors="replace")
+            except (OSError, ValueError):
+                pass
+
+
+def _status(message: str) -> AbstractContextManager[Any]:
+    """Rich spinner only on a real terminal (D-025); plain no-op otherwise."""
+    return console.status(message) if sys.stdout.isatty() else nullcontext()
+
+
 @app.callback()
 def _main(ctx: typer.Context) -> None:
+    _utf8_streams()
     install_socket_guard()
 
 
@@ -73,32 +91,24 @@ def run(
     user: Annotated[Optional[str], typer.Option("--user")] = None,
     overwrite: Annotated[bool, typer.Option("--overwrite")] = False,
     debug: Annotated[bool, typer.Option("--debug")] = False,
-    accept_snapshot: Annotated[bool, typer.Option("--accept-snapshot", help="Mark this export as the accepted state (next run's baseline) if it passes")] = False,
+    accept_snapshot: Annotated[bool, typer.Option("--accept-snapshot", help="Opt in: save this export in Snapshot History as the accepted state (next run's baseline) if it passes")] = False,
 ) -> None:
     """Reconcile an implemented rate book against the approved workbook and the Jira story."""
     from .pipeline import RunOptions, run_reconciliation
     from .report.writer import verdict_text
-    from .snapshots.store import SnapshotStore
     try:
-        with console.status("[bold]Starting...") as st:
+        with _status("[bold]Starting...") as st:
             res = run_reconciliation(RunOptions(approved, jira, export, out, baseline, lob, state, profile, user, overwrite, debug, accept_snapshot),
-                                     progress=lambda m: st.update(f"[bold]{m}..."))
+                                     progress=(lambda m: st.update(f"[bold]{m}...")) if st is not None else None)
     except Exception as exc:  # noqa: BLE001
         _fail(exc, debug)
         return
     _print_result(res, verdict_text(res))
     console.print(f"\nReports written to [bold]{out}[/bold]  (open reconciliation_report.html)")
-    if res.snapshot_id and not accept_snapshot and res.verdict in (Verdict.PASS, Verdict.PASS_WITH_WARNINGS, Verdict.PASS_WITH_LIMITATIONS) \
-            and sys.stdin.isatty():
-        if typer.confirm("Accept this export as the accepted state? It becomes the baseline for the next run of this rate book", default=False):
-            sn = SnapshotStore()
-            try:
-                sn.accept(res.snapshot_id, user)
-            finally:
-                sn.close()
-            console.print("[green]Snapshot accepted.[/green]")
-    elif res.snapshot_id and res.verdict in (Verdict.PASS, Verdict.PASS_WITH_WARNINGS, Verdict.PASS_WITH_LIMITATIONS) and not accept_snapshot:
-        console.print(f"[dim]To use this export as the next baseline: rgl snapshot accept {res.snapshot_id}[/dim]")
+    if res.snapshot_id:
+        passed = res.verdict in (Verdict.PASS, Verdict.PASS_WITH_WARNINGS, Verdict.PASS_WITH_LIMITATIONS)
+        console.print(f"[dim]Snapshot {res.snapshot_id} recorded"
+                      f"{' and accepted as the next baseline' if accept_snapshot and passed else ' (not accepted: only a passing run can be)' if accept_snapshot else ''}.[/dim]")
     raise typer.Exit(res.exit_code)
 
 
@@ -112,6 +122,7 @@ def _print_result(res: Any, text: str) -> None:
              ("Export edition", s["export_edition"]), ("Baseline", s["baseline"])]
     for label, v in facts:
         console.print(f"  [dim]{label:<17}[/dim]{v or '-'}")
+    console.print(f"  [dim]{s['scope_check']}[/dim]")
     console.print()
     console.print(f"  [bold]{s['tables_analyzed']}[/bold] tables analyzed  [green]{s['tables_matched']} matched[/green]  "
                   f"[red]{s['tables_with_discrepancies']} with discrepancies[/red]  [red]{s['scope_violations']} scope violation(s)[/red]")
@@ -147,7 +158,7 @@ def drift(
         if out.exists() and any(out.iterdir()) and not overwrite:
             raise RGLError("The output folder already contains files.", where=out.name, next_step="Use a new --out or --overwrite.")
         out.mkdir(parents=True, exist_ok=True)
-        with console.status("Reading exports..."):
+        with _status("Reading exports..."):
             a = ingest_export(left, cfg, "EXPORT", lob)
             b = ingest_export(right, cfg, "EXPORT", lob)
             res = run_drift(a.book, b.book, cfg, (lob or a.book.metadata.get("lob") or "GW").upper())
@@ -196,8 +207,8 @@ def inspect(file: Annotated[Path, typer.Argument(help="A Guidewire export or app
                     hdr = g.rows[lay.header_row]
                     idx = [j for j, v in enumerate(hdr) if v not in (None, "")]
                     decl = {j: parse_type_token(g.rows[lay.type_row][j]) for j in idx if j < len(g.rows[lay.type_row])}
-                    types = [map_type(decl[j][0]) if decl.get(j) else map_type("STRING") for j in idx]
-                    specs = infer_columns([str(hdr[j]) for j in idx], types, [decl[j][1] if decl.get(j) else None for j in idx], "X", None)
+                    types = [map_type(tok[0]) if (tok := decl.get(j)) else map_type("STRING") for j in idx]
+                    specs = infer_columns([str(hdr[j]) for j in idx], types, [tok[1] if (tok := decl.get(j)) else None for j in idx], "X", None)
                     for h in ("Column", "Canonical", "Role", "Type", "Scale"):
                         t.add_column(h)
                     for sp in specs:
@@ -217,7 +228,7 @@ def inspect(file: Annotated[Path, typer.Argument(help="A Guidewire export or app
 
 # ---------------------------------------------------------------- review / map
 def _review(run_dir: Path, only_mapping: bool, user: str | None) -> None:
-    from .learning.review import apply_decision, describe, load_proposals
+    from .learning.review import apply_decision, describe, load_proposals, propose
     from .learning.store import LearningStore
     props = load_proposals(run_dir)
     if only_mapping:
@@ -248,9 +259,16 @@ def _review(run_dir: Path, only_mapping: bool, user: str | None) -> None:
                 done += 1
             elif ans == "r":
                 console.print("  " + apply_decision(store, p, "reject"))
+            elif propose(store, p, user):
+                console.print("  kept as PROPOSED (not in force); confirm later with `rgl learn confirm <id>`")
     finally:
         store.close()
-    console.print(f"[green]{done} item(s) confirmed.[/green] Re-run the reconciliation to use them.")
+    if done:
+        from .learning.team import team_file
+        console.print(f"[green]{done} item(s) confirmed[/green] and written to [bold]{team_file()}[/bold] (user and date recorded). "
+                      "Commit that file so the whole team gets the mapping. Re-run the reconciliation to use it.")
+    else:
+        console.print("0 items confirmed.")
 
 
 @app.command("map")
@@ -267,38 +285,79 @@ def review(run_dir: Annotated[Path, typer.Argument(help="Output folder of a prev
 
 # ---------------------------------------------------------------- learn
 @learn_app.command("list")
-def learn_list(status: Annotated[Optional[str], typer.Option("--status")] = None, kind: Annotated[Optional[str], typer.Option("--kind")] = None) -> None:
+def learn_list(status: Annotated[Optional[str], typer.Option("--status", help="CONFIRMED (team file), PROPOSED, PROMOTED, RETIRED")] = None,
+               kind: Annotated[Optional[str], typer.Option("--kind")] = None) -> None:
+    """Confirmed team mappings (config/team_mappings.yaml) and local proposals."""
     from .learning.store import LearningStore
     st = LearningStore()
     t = Table(box=box.SIMPLE_HEAD)
-    for h in ("ID", "Kind", "LOB", "Table", "Key", "Value", "Status", "By", "v"):
+    for h in ("ID", "Kind", "LOB", "Table", "Key", "Value", "Status", "By", "On"):
         t.add_column(h, overflow="fold")
-    for r in st.list(kind, status):
-        t.add_row(str(r["id"]), r["kind"], r["scope_lob"] or "", r["scope_table"] or "", r["key"], r["value_json"], r["status"], r["confirmed_by"] or r["created_by"] or "", str(r["version"]))
+    try:
+        if status in (None, "CONFIRMED"):
+            for i in st.confirmed_items():
+                if kind and i["kind"] != kind:
+                    continue
+                t.add_row(str(i["id"]), i["kind"], i.get("scope_lob") or "", i.get("scope_table") or "", i["key"], json.dumps(i["value"]),
+                          "CONFIRMED" + (" (legacy db)" if i["source"] != "team" else ""), i.get("confirmed_by") or "", str(i.get("confirmed_on") or ""))
+        for r in st.list(kind, status):
+            if r["status"] == "CONFIRMED":
+                continue
+            if status is None and r["status"] in ("PROMOTED", "RETIRED"):
+                continue
+            t.add_row(str(r["id"]), r["kind"], r["scope_lob"] or "", r["scope_table"] or "", r["key"], r["value_json"], r["status"],
+                      r["confirmed_by"] or r["created_by"] or "", (r["confirmed_at"] or r["created_at"] or "")[:10])
+    finally:
+        st.close()
     console.print(t)
-    st.close()
 
 
 @learn_app.command("show")
-def learn_show(item_id: int) -> None:
+def learn_show(item_id: str) -> None:
     from .learning.store import LearningStore
     st = LearningStore()
-    r = st.get(item_id)
-    console.print_json(json.dumps(dict(r)) if r else "{}")
-    st.close()
+    try:
+        if item_id.startswith("T-"):
+            found = [i for i in st.team_items() if i["id"] == item_id]
+            console.print_json(json.dumps(found[0], default=str) if found else "{}")
+        else:
+            r = st.get(int(item_id))
+            console.print_json(json.dumps(dict(r)) if r else "{}")
+    finally:
+        st.close()
+
+
+@learn_app.command("confirm")
+def learn_confirm(item_id: int, user: Annotated[Optional[str], typer.Option("--user")] = None) -> None:
+    """Promote a local PROPOSED item into the team mappings file."""
+    from .learning.store import LearningStore
+    from .learning.team import team_file
+    st = LearningStore()
+    try:
+        tid = st.confirm(item_id, user)
+    except RGLError as exc:
+        _fail(exc)
+        return
+    finally:
+        st.close()
+    console.print(f"Item {item_id} confirmed as {tid} in [bold]{team_file()}[/bold]. Commit that file to share it.")
 
 
 @learn_app.command("retire")
-def learn_retire(item_id: int, user: Annotated[Optional[str], typer.Option("--user")] = None) -> None:
+def learn_retire(item_id: str, user: Annotated[Optional[str], typer.Option("--user")] = None) -> None:
+    """Remove a team mapping (ID like T-1a2b3c) or retire a local proposal (numeric ID)."""
     from .learning.store import LearningStore
     st = LearningStore()
-    st.retire(item_id, user)
-    st.close()
-    console.print(f"Item {item_id} retired.")
+    try:
+        ok = st.retire(item_id, user)
+    finally:
+        st.close()
+    console.print(f"Item {item_id} {'retired' if ok else 'not found'}.")
 
 
 @learn_app.command("export")
 def learn_export(out: Annotated[Path, typer.Option("--out")]) -> None:
+    """Write every mapping in force to a file (handy for moving legacy local items into the team file)."""
     from .learning.store import LearningStore
     st = LearningStore()
     n = st.export_yaml(out)
@@ -307,7 +366,7 @@ def learn_export(out: Annotated[Path, typer.Option("--out")]) -> None:
 
 
 @learn_app.command("import")
-def learn_import(file: Path, trust: Annotated[bool, typer.Option("--trust", help="Import as CONFIRMED instead of PROPOSED")] = False,
+def learn_import(file: Path, trust: Annotated[bool, typer.Option("--trust", help="Write straight into the team file as CONFIRMED instead of keeping as PROPOSED")] = False,
                  user: Annotated[Optional[str], typer.Option("--user")] = None) -> None:
     from .learning.store import LearningStore
     st = LearningStore()
@@ -318,21 +377,21 @@ def learn_import(file: Path, trust: Annotated[bool, typer.Option("--trust", help
         return
     finally:
         st.close()
-    console.print(f"Imported {n} item(s) as {'CONFIRMED' if trust else 'PROPOSED (review with `rgl learn list --status PROPOSED`)'}.")
+    console.print(f"Imported {n} item(s) as {'CONFIRMED (team file)' if trust else 'PROPOSED (review with `rgl learn list --status PROPOSED`, then `rgl learn confirm <id>`)'}.")
 
 
 @learn_app.command("diff")
 def learn_diff(file: Path) -> None:
-    """Show what a team mappings file would add."""
+    """Show what another mappings file would add to the team mappings."""
     import yaml
 
     from .learning.store import LearningStore
     st = LearningStore()
-    mine = {(r["kind"], r["key"], r["scope_lob"] or "", r["scope_table"] or "", r["value_json"]) for r in st.list(status="CONFIRMED")}
+    mine = {(i["kind"], i["key"], i.get("scope_lob") or "", i.get("scope_table") or "", json.dumps(i["value"], sort_keys=True)) for i in st.confirmed_items()}
     data = yaml.safe_load(Path(file).read_text(encoding="utf-8")) or {}
     new = [it for it in data.get("items", []) if (it["kind"], it["key"], it.get("scope_lob") or "", it.get("scope_table") or "", json.dumps(it["value"], sort_keys=True)) not in mine]
     st.close()
-    console.print(f"{len(new)} item(s) in {file.name} are not in your confirmed store:")
+    console.print(f"{len(new)} item(s) in {file.name} are not in your team mappings:")
     for it in new[:50]:
         console.print(f"  + {it['kind']} {it['key']} -> {it['value']}")
 
@@ -345,7 +404,10 @@ def stats() -> None:
     s = st.stats()
     st.close()
     t = Table(box=box.SIMPLE_HEAD, show_header=False)
-    pct = lambda v: "n/a" if v is None else f"{v * 100:.0f}%"  # noqa: E731
+
+    def pct(v: float | None) -> str:
+        return "n/a" if v is None else f"{v * 100:.0f}%"
+
     t.add_row("Runs recorded", str(s["runs"]))
     t.add_row("Auto-mapped table rate", pct(s["auto_mapped_rate"]))
     t.add_row("Suggestion acceptance rate", pct(s["suggestion_acceptance_rate"]))
@@ -399,7 +461,7 @@ def snap_take(export: Annotated[Path, typer.Option("--export")], lob: Annotated[
     from .snapshots.store import SnapshotStore
     try:
         cfg = load_config()
-        with console.status("Reading export..."):
+        with _status("Reading export..."):
             ing = ingest_export(export, cfg, "EXPORT", lob)
         if ing.issues and any(i.status == "NEEDS_MAPPING" for i in ing.issues):
             raise RGLError("Some sheets could not be read, so the snapshot would be incomplete.", where=export.name, next_step="Run `rgl inspect` on the file first.")
@@ -409,6 +471,8 @@ def snap_take(export: Annotated[Path, typer.Option("--export")], lob: Annotated[
     except Exception as exc:  # noqa: BLE001
         _fail(exc)
         return
+    if not cfg.snapshots.enabled:
+        console.print("[yellow]Note:[/yellow] Snapshot History is off (snapshots.enabled: false), so runs will not use this snapshot unless you run with `--profile snapshots` or enable it in config.")
     console.print(f"[green]Snapshot {sid} recorded[/green] ({len(ing.book.tables)} tables, edition {ing.book.metadata.get('edition', '?')}). It will be used as the baseline for the next run.")
 
 
@@ -452,7 +516,8 @@ def ui(port: Annotated[int, typer.Option("--port")] = 8501) -> None:
 
 CORE_SELFTEST = ["clean_pass", "factor_mismatch", "order_of_magnitude", "rounded_match_only", "missing_row", "off_by_one_range", "bypass_violation",
                  "snapshot_baseline_undeclared_change", "snapshot_first_run_limitations", "wildcard_to_blank", "duplicate_key", "unsafe_zip_traversal",
-                 "unmappable_table_blocked", "effective_date_mismatch"]
+                 "unmappable_table_blocked", "effective_date_mismatch", "no_baseline_strict_limitations",
+                 "out_of_scope_table_dated"]
 
 
 @app.command()
@@ -468,9 +533,10 @@ def selftest(full: Annotated[bool, typer.Option("--full", help="Run all fixture 
     for h in ("Scenario", "Expected", "Got", "Result"):
         t.add_column(h)
     try:
-        with console.status("Running scenarios...") as stt:
+        with _status("Running scenarios...") as stt:
             for n in names:
-                stt.update(f"Running {n}...")
+                if stt is not None:
+                    stt.update(f"Running {n}...")
                 sc = build_scenario(n, work / "gen", tables=tables)
                 o = run_scenario(sc, work / "run")
                 probs = check(sc, o)

@@ -1,0 +1,3 @@
+# Opt-in: keep a Snapshot History (use with --profile snapshots).
+snapshots:
+  enabled: true

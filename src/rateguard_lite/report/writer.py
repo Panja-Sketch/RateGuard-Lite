@@ -64,6 +64,7 @@ def verdict_text(r: RunResult, width: int = 100) -> str:
         f"Rate book: {s['rate_book'] or '-'} | Export edition: {s['export_edition'] or '-'} | Baseline: {s['baseline']}",
         f"Tables: {s['tables_analyzed']} analyzed | {s['tables_matched']} matched | {s['tables_with_discrepancies']} with discrepancies | {s['scope_violations']} scope violation(s)",
         f"Cells: {s['cells_compared']:,} compared | {s['critical']} critical | {s['high']} high | {s['warnings']} warnings | {s['rounded_matches']} rounded matches",
+        s["scope_check"],
     ]
     if r.tolerance_notes:
         lines.append("Tolerance overrides: " + "; ".join(r.tolerance_notes))
@@ -94,7 +95,7 @@ def jira_comment(r: RunResult) -> str:
            f"Rate book {s['rate_book'] or '-'} edition {s['export_edition'] or '-'}, filing effective {s['filing_effective_date'] or '-'}.",
            f"Tables: {s['tables_analyzed']} analyzed, {s['tables_matched']} matched, {s['tables_with_discrepancies']} with discrepancies, "
            f"{s['scope_violations']} scope violation(s). Cells compared: {s['cells_compared']:,}.",
-           f"Baseline: {s['baseline']}."]
+           f"Baseline: {s['baseline']}.", s["scope_check"] + "."]
     block = [f for f in r.findings if f.level in BLOCKING]
     if block:
         out.append("")
@@ -164,7 +165,7 @@ def write_xlsx(r: RunResult, path: Path) -> None:
     s = r.summary
     items = [("Verdict", f"{r.verdict.value} — {GATE_TEXT[r.verdict]}"), ("Run", r.run_id), ("Tool version", __version__), ("Config hash", r.cfg_hash),
              ("Ticket", s["ticket"]), ("LOB", s["lob"]), ("State", ",".join(s["states"])), ("Filing effective", s["filing_effective_date"]),
-             ("Rate book", s["rate_book"]), ("Export edition", s["export_edition"]), ("Baseline", s["baseline"]),
+             ("Rate book", s["rate_book"]), ("Export edition", s["export_edition"]), ("Baseline", s["baseline"]), ("Scope check", s["scope_check"]),
              ("Tables analyzed", s["tables_analyzed"]), ("Tables matched", s["tables_matched"]), ("Tables with discrepancies", s["tables_with_discrepancies"]),
              ("Scope violations", s["scope_violations"]), ("Cells compared", s["cells_compared"]), ("Critical", s["critical"]), ("High", s["high"]),
              ("Blockers", s["blockers"]), ("Needs mapping", s["needs_mapping"]), ("Needs review", s["needs_review"]), ("Not evaluated", s["not_evaluated"]),
@@ -242,7 +243,7 @@ def write_manifest(r: RunResult, path: Path) -> None:
         "tool_version": __version__, "python": sys.version.split()[0], "platform": platform.system(), "run_id": r.run_id, "started_at": r.started_at,
         "user": r.user, "config_hash": r.cfg_hash, "learned_store_version": r.learned_version, "learned_items_used": r.learned_used,
         "inputs": [i.model_dump() for i in r.inputs], "baseline": r.baseline_info, "timings_seconds": r.timings,
-        "snapshot_id": r.snapshot_id, "profile_config": r.cfg.model_dump(),
+        "snapshot_id": r.snapshot_id, "check_notes": r.check_notes, "profile_config": r.cfg.model_dump(),
     }
     path.write_text(json.dumps(m, indent=2, sort_keys=True), encoding="utf-8")
 

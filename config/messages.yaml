@@ -35,3 +35,4 @@ SUGGESTED_MAPPING: {explain: "The tool matched this table by similarity; it is n
 JIRA_CONFLICT: {explain: "The Jira story gives conflicting actions for the same table.", fix: "Clarify the intended action in the story."}
 JIRA_UNPARSED: {explain: "A line mentions tables or dates but the tool could not interpret it.", fix: "Review the line manually or teach the pattern with `rgl review`."}
 NOT_EVALUATED_NO_BASELINE: {explain: "No baseline exists so changes to other tables were not checked.", fix: "Use --baseline, or accept this run as a snapshot so the next run has one."}
+OUT_OF_SCOPE_TABLE_DATED: {explain: "A table outside the approved workbook and the Jira story carries this filing's effective date or edition, so it may have been loaded or edited by mistake.", fix: "Confirm with the developer whether the table was meant to change; if so, add it to the story and the approved workbook, otherwise restore its previous date and edition."}

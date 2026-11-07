@@ -67,3 +67,59 @@ def test_test_scenarios_generated(scenario, tmp_path):
     assert any("1.045" in r["expected_factor"] for r in t.parameter)
     ids = [r["test_id"] for r in t.parameter]
     assert len(ids) == len(set(ids))
+
+
+def test_no_baseline_default_passes_but_every_report_says_scope_check_not_performed(scenario, tmp_path):      # D-024 (2)
+    line = "Scope check (tables outside approved/Jira): not performed – no baseline provided"
+    sc = scenario("no_baseline_default_pass")
+    o = run_scenario(sc, tmp_path, write_reports=True)
+    assert o.verdict == "PASS" and o.exit_code == 0 and not [f for f in o.result.findings if f.rule_id == "NOT_EVALUATED_NO_BASELINE"]
+    out = tmp_path / sc.name
+    assert line in (out / "verdict.txt").read_text(encoding="utf-8")
+    assert line in (out / "jira_comment.txt").read_text(encoding="utf-8")
+    assert line in (out / "reconciliation_report.html").read_text(encoding="utf-8")
+    data = json.loads((out / "reconciliation_report.json").read_text(encoding="utf-8"))
+    assert data["summary"]["scope_check"] == line and data["summary"]["scope_check_performed"] is False
+    import openpyxl
+
+    ws = openpyxl.load_workbook(out / "reconciliation_report.xlsx")["Summary"]
+    assert any(r[1] == line for r in ws.iter_rows(values_only=True))
+
+
+def test_scope_check_line_when_baseline_given(scenario, tmp_path):
+    o = run_scenario(scenario("clean_pass"), tmp_path)
+    assert o.result.summary["scope_check_performed"] and "performed against" in o.result.summary["scope_check"]
+
+
+def test_out_of_scope_table_dated_details(scenario, tmp_path):                                              # D-024 (3)
+    o = run_scenario(scenario("out_of_scope_table_dated"), tmp_path, write_reports=True)
+    hits = [f for f in o.result.findings if f.rule_id == "OUT_OF_SCOPE_TABLE_DATED"]
+    assert hits and all(f.level == "NEEDS_REVIEW" and f.table_id and f.explanation and f.suggested_fix for f in hits)
+    approved_ids = {p.id for p in o.result.mapping.pairs if p.approved is not None}
+    assert not ({f.table_id for f in hits} & approved_ids)                                                  # only tables outside approved/Jira
+    notes = json.loads((tmp_path / "out_of_scope_table_dated" / "run_manifest.json").read_text(encoding="utf-8"))["check_notes"]
+    assert any("flagged" in n for n in notes["out_of_scope_table_dated"])
+
+
+def test_out_of_scope_check_skips_silently_without_per_table_stamps(scenario, tmp_path):
+    o = run_scenario(scenario("clean_pass"), tmp_path, write_reports=True)          # every table carries the same stamp
+    assert not [f for f in o.result.findings if f.rule_id == "OUT_OF_SCOPE_TABLE_DATED"]
+    assert any("check skipped" in n for n in o.result.check_notes["out_of_scope_table_dated"])
+
+
+def test_run_with_stdout_redirected_to_a_file_does_not_crash(scenario, tmp_path):                           # D-025
+    """A real subprocess with stdout in a file (cp1252 console code page on Windows): no UnicodeEncodeError, UTF-8 output."""
+    import os
+    import subprocess
+    import sys
+
+    sc = scenario("clean_pass")
+    log = tmp_path / "stdout.txt"
+    env = {**os.environ, "PYTHONIOENCODING": "cp1252", "RGL_DATA_DIR": str(tmp_path / "d")}
+    env.pop("PYTHONUTF8", None)
+    with log.open("wb") as fh:
+        proc = subprocess.run([sys.executable, "-m", "rateguard_lite.cli", *sc.cli_args(tmp_path / "o"), "--baseline", str(sc.baseline)],
+                              stdout=fh, stderr=subprocess.PIPE, env=env, check=False)    # noqa: S603
+    assert proc.returncode == 0, proc.stderr.decode(errors="replace")
+    assert b"UnicodeEncodeError" not in proc.stderr and b"Internal error" not in log.read_bytes()
+    assert b"PASS" in log.read_bytes()

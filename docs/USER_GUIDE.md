@@ -33,12 +33,17 @@ To tell the team, paste `jira_comment.txt` into the story.
 ## 4. Common situations
 
 **"NEEDS_MAPPING / BLOCKED: table could not be matched."**
-The approved tab name and the Guidewire table name look too different. Run `rgl map --run results\PC-12345`, pick the right Guidewire table once, then re-run. The tool remembers it for next time.
+The approved tab name and the Guidewire table name look too different. Run `rgl map --run results\PC-12345`, pick the right Guidewire table once, then re-run. The choice is written to `config/team_mappings.yaml` with your name and the date. Commit that file so teammates get the mapping too.
 
 **"NEEDS_REVIEW: matched by similarity."** Confirm it with `rgl review results\PC-12345`.
 
-**"PASS_WITH_LIMITATIONS: no baseline."**
-All approved values were verified, but changes to *other* tables could not be checked. Add `--baseline`, or answer *yes* to "Accept this export as the accepted state?" at the end of a passing run so the next run has a baseline. Better still: before the developer starts, run `rgl snapshot take --export <current QA export>`.
+**"Scope check ... not performed – no baseline provided."**
+You ran without `--baseline`. All approved values were verified, but changes to *other* tables could not be compared, so that check was not done (the verdict can still be PASS). To run it, add `--baseline <export of the rate book before the change>`. If your team's profile sets `verdict.require_baseline_for_pass: true`, such a run is `PASS_WITH_LIMITATIONS` instead.
+
+**"NEEDS_REVIEW: OUT_OF_SCOPE_TABLE_DATED."**
+A table that is not in the approved workbook or the Jira story carries this filing's effective date or edition in its own metadata, so someone may have loaded or edited it by mistake. Ask the developer, then either add it to the story and approved file or restore its old date/edition. If the export has no per-table dates (or every table has the same stamp) this check is skipped and noted in `run_manifest.json`.
+
+**"I skipped a suggestion in `rgl review`."** It is kept locally as PROPOSED and is not used. See `rgl learn list --status PROPOSED`, then `rgl learn confirm <id>` to write it to the team file.
 
 **"Struck-through row."** A row is crossed out in the approved file. Confirm with actuarial whether it should be deleted.
 

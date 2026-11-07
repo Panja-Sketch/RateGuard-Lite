@@ -42,13 +42,13 @@ Open `result/reconciliation_report.html` for the readable report. Prefer a scree
 | `--approved` | yes | Approved workbook (`.xlsx`/`.xlsm`), a folder of `.xlsx`, or a `.zip`. **Whole tables.** |
 | `--jira` | yes | The story as `.txt`, `.md` or `.html` (copy-paste or *Export → HTML*). |
 | `--export` | yes | Guidewire **Export to Spreadsheet** of the implemented rate book. |
-| `--baseline` | no | Export of the same rate book *before* the change. If omitted, the tool uses its own **snapshot history**. |
+| `--baseline` | no | Export of the same rate book *before* the change. If omitted, the scope check for tables outside the approved file and Jira is **not performed** (and the report says so). |
 
 ## The verdict
 
 | Verdict | Meaning | Exit code |
 |---|---|---|
-| `PASS` | Ready for UAT | 0 |
+| `PASS` | Ready for UAT (a run with no `--baseline` can still `PASS`; the report states the scope check was not performed) | 0 |
 | `PASS_WITH_WARNINGS` / `PASS_WITH_LIMITATIONS` | Values verified; read the warnings / scope checks not performed | 5 |
 | `NEEDS_REVIEW` | A human must confirm something (e.g. an unconfirmed table match) | 2 |
 | `BLOCKED` | The tool could not verify (unmapped table, duplicate keys, unreadable cell) | 2 |
@@ -67,13 +67,13 @@ The tool **fails closed**: anything ambiguous is reported as needing mapping or 
 
 ## Learning, safely
 
-When you confirm a table match once, the tool remembers it. Learning changes **how files are read and mapped** only. It can never change a comparison, a tolerance, a severity, or turn a FAIL into a PASS.
+When you confirm a table match once, it is saved in `config/team_mappings.yaml` (with your name and the date); commit that file and the whole team benefits. Learning changes **how files are read and mapped** only. It can never change a comparison, a tolerance, a severity, or turn a FAIL into a PASS.
 
 ## Known limitations
 
 - It verifies **rate table contents and scope**, not rating algorithms, premium maths, or Guidewire rate book selection logic (the transaction matrix gives QA tests for that).
 - Guidewire export layouts vary. On a new Guidewire version run `rgl inspect FILE` first and adjust `config/gw_layouts.yaml` if needed.
-- On the **first** run of a rate book with no `--baseline`, changes to tables outside the approved file cannot be detected (`PASS_WITH_LIMITATIONS`). From the second accepted run, Snapshot History provides the baseline. QA can run `rgl snapshot take --export <file>` *before* development starts to remove the gap.
+- Without `--baseline`, changes to tables outside the approved file cannot be detected by comparison. The run still passes if nothing else is wrong and every report shows *"Scope check (tables outside approved/Jira): not performed – no baseline provided"*. The extra `OUT_OF_SCOPE_TABLE_DATED` check partly covers the gap using each table's own date/edition. Set `verdict.require_baseline_for_pass: true` (or `--profile strict_baseline`) to cap such runs at `PASS_WITH_LIMITATIONS`. Snapshot History is optional and off by default (`--profile snapshots` or `--accept-snapshot`).
 - Jira parsing is pattern-based; unusual phrasing becomes `NEEDS_REVIEW`.
 - The approved workbook is treated as truth. The tool does not validate actuarial correctness.
 - Not yet implemented (see [docs/DECISIONS.md](docs/DECISIONS.md)): learned *layout* fingerprints applied to header detection, and the optional local-LLM Jira assist (config flag exists, default off).

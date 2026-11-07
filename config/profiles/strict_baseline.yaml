@@ -1,0 +1,3 @@
+# Strict: a run without a baseline cannot return a plain PASS (use with --profile strict_baseline).
+verdict:
+  require_baseline_for_pass: true

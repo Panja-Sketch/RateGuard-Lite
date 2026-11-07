@@ -51,25 +51,30 @@ Real exports stay local and are never committed (`.gitignore` excludes `*.xlsx`,
 
 | File | Contents |
 |---|---|
-| `learning.db` | Learned items (append-only versions), run history, finding dispositions. |
-| `snapshots.db` | Per-run normalized export rows (compressed) used as the baseline. |
+| `learning.db` | PROPOSED mapping items, run history, finding dispositions. (Older databases may still hold CONFIRMED rows; they are read, but the team file wins.) |
+| `snapshots.db` | Only if Snapshot History is enabled: per-run normalized export rows (compressed) used as a baseline. |
 
-Both are local SQLite files. Back them up like any team asset, or share mappings via `rgl learn export/import`.
+Both are local SQLite files. **Confirmed mappings are not here**: they live in the repo file `config/team_mappings.yaml` (see below).
 
 ## Learning
 
 Allow-listed kinds only: `TABLE_ALIAS`, `COLUMN_SYNONYM`, `COLUMN_ROLE`, `WILDCARD_TOKEN`, `LAYOUT_FINGERPRINT`, `RANGE_CONVENTION`, `JIRA_PATTERN`, `FINDING_DISPOSITION`.
 
-- `rgl learn list|show|retire|diff`
-- `rgl learn export --out team_mappings.yaml` and `rgl learn import team_mappings.yaml` (imported items are `PROPOSED` and need local confirmation, unless `--trust`).
-- Keep `team_mappings.yaml` in an internal Git repo to share across the team.
+- **`config/team_mappings.yaml` is the primary source of CONFIRMED items.** `rgl review`, `rgl map` and `rgl learn confirm` append to it with `confirmed_by` and `confirmed_on`. It is a plain file: review and commit it like any config change. Set `RGL_TEAM_MAPPINGS` to use a different location.
+- The local SQLite store keeps only PROPOSED items (skipped review items, imported files) and run history.
+- `rgl learn list|show|confirm|retire|diff` (team ids look like `T-1a2b3c`; `retire` on one removes it from the file).
+- `rgl learn export --out file.yaml` and `rgl learn import file.yaml` (imported items are `PROPOSED` and need `rgl learn confirm`, unless `--trust` writes them straight to the team file). Use `export` once to move any legacy local CONFIRMED rows into the team file.
 - `rgl stats` shows auto-mapped rate, suggestion acceptance, false-positive rate and manual mappings per run.
 
 A `FALSE_POSITIVE` disposition only adds a hint next to an identical future finding. The finding still counts.
 
+## Verdict without a baseline
+
+`verdict.require_baseline_for_pass` (default `false`): a run with no baseline and no other issue is `PASS`; every report shows "Scope check (tables outside approved/Jira): not performed – no baseline provided". Set it to `true` (or use `--profile strict_baseline`) to return `PASS_WITH_LIMITATIONS` (exit 5) instead.
+
 ## Snapshot history
 
-`rgl snapshot list|show|take|accept|purge`. Retention is `snapshots.retention_runs` (20) per rate book. A snapshot is used as a baseline only when `VERIFIED` and older (edition or effective date) than the current filing.
+**Off by default** (`snapshots.enabled: false`; see D-024). Opt in with `--profile snapshots`, `snapshots.enabled: true`, or `--accept-snapshot` on a run. There is no end-of-run prompt. `rgl snapshot list|show|take|accept|purge`. Retention is `snapshots.retention_runs` (20) per rate book. A snapshot is used as a baseline only when `VERIFIED` and older (edition or effective date) than the current filing.
 
 ## Security posture
 

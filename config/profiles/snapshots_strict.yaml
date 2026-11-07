@@ -1,0 +1,5 @@
+# Snapshot History on AND baseline required for PASS.
+snapshots:
+  enabled: true
+verdict:
+  require_baseline_for_pass: true

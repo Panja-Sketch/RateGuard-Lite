@@ -12,7 +12,7 @@ import shutil
 import zipfile
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime
 from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 from typing import Any
@@ -108,7 +108,8 @@ def _filler(i: int, kind: str, rng: random.Random) -> T:
         n = rng.randint(5, 50)
         if ks[0][0] == "Construction":
             vals = (_CONSTR * 9)[:min(n, 54)]
-            vals = [f"{v} {k}" if k else v for k, v in zip(vals, [""] * 6 + list(range(1, 100)), strict=False)]
+            suffixes: list[str | int] = [*([""] * 6), *range(1, 100)]
+            vals = [f"{v} {k}" if k else str(v) for k, v in zip(vals, suffixes, strict=False)]
         elif ks[0][0] == "Protection Class":
             vals = [str(k) for k in range(1, min(n, 10) + 1)]
         else:
@@ -297,7 +298,7 @@ def write_export(path: Path, tables: list[T], edition: str, eff: date, rng_seed:
                 if ti % 2 == 0:
                     val = val.strftime("%m/%d/%Y")
                 else:
-                    c = WriteOnlyCell(ws, value=val)
+                    c = WriteOnlyCell(ws, value=datetime(val.year, val.month, val.day))
                     c.number_format = "mm/dd/yyyy"
                     ws.append([label, c])
                     continue
@@ -326,7 +327,9 @@ def write_export(path: Path, tables: list[T], edition: str, eff: date, rng_seed:
 def write_approved(path: Path, tables: list[T], highlight: bool = True, strike_row: tuple[str, int] | None = None,
                    number_format_codes: bool = False, formula_cell: tuple[str, int, int] | None = None) -> None:
     wb = openpyxl.Workbook()
-    wb.remove(wb.active)
+    first = wb.active
+    assert first is not None
+    wb.remove(first)
     yellow = PatternFill("solid", fgColor="FFFF00")
     for t in tables:
         ws = wb.create_sheet(t.approved_sheet[:31])
@@ -377,6 +380,7 @@ class Ctx:
     meta_override: dict[str, dict[str, str]] = field(default_factory=dict)
     use_baseline_flag: bool = True
     seed_snapshot: bool = False
+    profile: str = "default"
     approved_kind: str = "xlsx"          # xlsx | zip | xlsm | folder
     write_kwargs: dict[str, Any] = field(default_factory=dict)
     post: Callable[[Path], None] | None = None   # post-process approved path (unsafe zip etc.)
@@ -405,6 +409,7 @@ class Scenario:
     expected_verdict: str
     expected_rules: set[str]
     expected_exit: int
+    profile: str = "default"
 
     def cli_args(self, out: Path) -> list[str]:
         a = ["run", "--approved", str(self.approved), "--jira", str(self.jira), "--export", str(self.export), "--out", str(out)]
@@ -464,14 +469,14 @@ def _first_filler(c: Ctx) -> T:
 
 
 def _m_snap_undeclared(c: Ctx) -> None:
-    c.use_baseline_flag, c.seed_snapshot = False, True
+    c.use_baseline_flag, c.seed_snapshot, c.profile = False, True, "snapshots"
     t = _first_filler(c)
     t.rows[1][-1] = t.rows[1][-1] + Decimal("0.1")
     c.expected_verdict, c.expected_rules, c.expected_exit = "FAIL", {"UNDECLARED_CHANGE"}, 1
 
 
 def _m_snap_first(c: Ctx) -> None:
-    c.use_baseline_flag = False
+    c.use_baseline_flag, c.profile = False, "snapshots_strict"
     c.expected_verdict, c.expected_rules, c.expected_exit = "PASS_WITH_LIMITATIONS", {"NOT_EVALUATED_NO_BASELINE"}, 5
 
 
@@ -546,8 +551,22 @@ def _m_eff_date(c: Ctx) -> None:
 
 
 def _m_no_baseline(c: Ctx) -> None:
+    # D-024: by default a run with no other issues PASSes without a baseline (the report says the scope check was not performed).
     c.use_baseline_flag = False
+    c.expected_verdict, c.expected_rules, c.expected_exit = "PASS", set(), 0
+
+
+def _m_no_baseline_strict(c: Ctx) -> None:
+    c.use_baseline_flag, c.profile = False, "strict_baseline"
     c.expected_verdict, c.expected_rules, c.expected_exit = "PASS_WITH_LIMITATIONS", {"NOT_EVALUATED_NO_BASELINE"}, 5
+
+
+def _m_out_of_scope_dated(c: Ctx) -> None:
+    # Some tables outside the approved file and Jira keep their old stamps; the rest carry this filing's date and edition.
+    fillers = [t for t in c.export if t.code not in APPROVED_CODES]
+    for t in fillers[: max(1, len(fillers) * 2 // 5)]:
+        c.meta_override[t.code] = {"Edition": OLD_EDITION, "Effective Date": OLD_EFF.strftime("%m/%d/%Y")}
+    c.expected_verdict, c.expected_rules, c.expected_exit = "NEEDS_REVIEW", {"OUT_OF_SCOPE_TABLE_DATED"}, 2
 
 
 def _m_unmappable(c: Ctx) -> None:
@@ -608,6 +627,8 @@ SCENARIOS: dict[str, Callable[[Ctx], None]] = {
     "approved_table_suspiciously_small": _m_small,
     "snapshot_baseline_undeclared_change": _m_snap_undeclared,
     "snapshot_first_run_limitations": _m_snap_first,
+    "no_baseline_strict_limitations": _m_no_baseline_strict,
+    "out_of_scope_table_dated": _m_out_of_scope_dated,
     "export_220_tables_perf": _m_perf,
     "truncated_sheet_names": _m_trunc_names,
     "wildcard_to_blank": _m_blank_factor,
@@ -619,7 +640,7 @@ SCENARIOS: dict[str, Callable[[Ctx], None]] = {
     "undeclared_change": _m_undeclared,
     "missing_update_resolved_by_full_table": _m_missing_update_resolved,
     "effective_date_mismatch": _m_eff_date,
-    "no_baseline_limitations": _m_no_baseline,
+    "no_baseline_default_pass": _m_no_baseline,
     "unmappable_table_blocked": _m_unmappable,
     "leading_zero_class_code": _m_leading_zero,
     "multi_file_zip_approved": _m_zip,
@@ -682,7 +703,7 @@ def build_scenario(name: str, out_dir: Path, tables: int = 120, seed: int = 7) -
         ctx.post(ap)
     jira = _write_jira(d, ctx.edition if False else NEW_EDITION, ctx.jira)
     return Scenario(name, d, approved_path, jira, export_p, baseline_p, ctx.use_baseline_flag, ctx.seed_snapshot,
-                    ctx.expected_verdict, ctx.expected_rules, ctx.expected_exit)
+                    ctx.expected_verdict, ctx.expected_rules, ctx.expected_exit, ctx.profile)
 
 
 def build_drift_pair(out_dir: Path, tables: int = 50, seed: int = 7) -> tuple[Path, Path]:

@@ -1,0 +1,5 @@
+# RateGuard-Lite team mappings - CONFIRMED aliases, column roles and wildcards shared by the whole team.
+# Written by `rgl review` / `rgl map` (with user and date). Review changes in git like any config file.
+# Mappings change how inputs are read and matched. They never change comparison math, tolerances or verdicts.
+rateguard_lite_mappings: 1
+items: []

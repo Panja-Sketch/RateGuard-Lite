@@ -9,8 +9,9 @@ Only to the `--out` folder you choose (reports, test scenarios, run log, manifes
 ## What is stored locally
 | Store | Contents |
 |---|---|
-| `learning.db` | Table names, column names, header text, specific tokens you confirmed (e.g. `-1` is a wildcard), run ids, input **hashes**, verdicts, your OS username. **No input file content.** |
-| `snapshots.db` | For each run, the normalized rows of the exported rate book (compressed). This is what lets the next run find undeclared changes. It stays on this machine; `rgl snapshot purge` deletes it. |
+| `config/team_mappings.yaml` (in the repo, shared via git) | Confirmed table-name aliases, column names, tokens (e.g. `-1` is a wildcard), with the confirming user name and date. **No input file content.** |
+| `learning.db` | Proposed (unconfirmed) mapping items using the same kinds of names, run ids, input **hashes**, verdicts, your OS username. **No input file content.** |
+| `snapshots.db` | **Only if you opt in** (Snapshot History is off by default): the normalized rows of the exported rate book (compressed), used as a baseline. It stays on this machine; `rgl snapshot purge` deletes it. |
 | `out/run.log` | Stages, counts, table IDs and rule IDs. Factor values only at DEBUG level (off by default). No absolute paths unless `--debug`. |
 
 ## What is never sent
@@ -22,4 +23,4 @@ Nothing is sent anywhere. There is no cloud component, telemetry or analytics. A
 ## Deleting data
 - Reports: delete the `--out` folder.
 - Snapshots: `rgl snapshot purge --all --yes`.
-- Learned items: `rgl learn retire <id>` (history is retained by design); to remove everything, delete `learning.db`.
+- Confirmed mappings: `rgl learn retire T-xxxxxx` removes the entry from `config/team_mappings.yaml` (git keeps the history). Proposals and run history: delete `learning.db`.

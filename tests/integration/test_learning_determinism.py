@@ -1,17 +1,22 @@
 import json
 import os
 import shutil
+from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
+import pytest
+import yaml
 from typer.testing import CliRunner
 
 from rateguard_lite.cli import app
+from rateguard_lite.errors import RGLError
 from rateguard_lite.learning.review import apply_decision
 from rateguard_lite.learning.store import LearningStore
 from rateguard_lite.pipeline import RunOptions, run_reconciliation
 from rateguard_lite.samples import generator as g
 from rateguard_lite.samples.runner import data_dir_env, run_scenario
+from rateguard_lite.snapshots.store import SnapshotStore
 
 VOLATILE = {"run_id", "started_at", "user"}
 
@@ -72,23 +77,46 @@ def test_learning_resolves_mapping_but_never_turns_fail_into_pass(gen_dir, tmp_p
         assert r3.verdict.value == "FAIL" and any(f.rule_id in ("VALUE_MISMATCH", "ORDER_OF_MAGNITUDE") for f in r3.findings)
 
 
-def test_learning_store_versioning_and_sharing(tmp_path):
+def test_confirmed_goes_to_team_file_proposed_stays_local(tmp_path, monkeypatch):          # D-024
+    team = tmp_path / "team_mappings.yaml"
+    monkeypatch.setenv("RGL_TEAM_MAPPINGS", str(team))
     st = LearningStore(tmp_path / "l.db")
     a = st.add("TABLE_ALIAS", "FOO BAR", {"canonical_id": "BOP:1"}, scope_lob="BOP", status="CONFIRMED", user="u1")
-    b = st.add("TABLE_ALIAS", "FOO BAR", {"canonical_id": "BOP:2"}, scope_lob="BOP", status="CONFIRMED", user="u2")
-    assert a != b and st.get(a)["status"] == "RETIRED" and st.get(b)["status"] == "CONFIRMED" and st.get(b)["version"] == 2
+    assert isinstance(a, str) and a.startswith("T-")
+    assert st.list(status="CONFIRMED") == []                                                  # SQLite never holds CONFIRMED
+    entry = yaml.safe_load(team.read_text(encoding="utf-8"))["items"][0]
+    assert entry["confirmed_by"] == "u1" and entry["confirmed_on"] == date.today().isoformat() and entry["value"] == {"canonical_id": "BOP:1"}
+    assert st.context("BOP").alias_for("BOP", "FOO BAR") == "BOP:1"
+    st.add("TABLE_ALIAS", "FOO BAR", {"canonical_id": "BOP:2"}, scope_lob="BOP", status="CONFIRMED", user="u2")   # same key: replaced, not duplicated
+    assert len(yaml.safe_load(team.read_text(encoding="utf-8"))["items"]) == 1
     assert st.context("BOP").alias_for("BOP", "FOO BAR") == "BOP:2"
-    out = tmp_path / "team.yaml"
+    # proposed -> local only, then promoted by an explicit confirm
+    pid = st.add("TABLE_ALIAS", "BAZ", {"canonical_id": "BOP:9"}, scope_lob="BOP")
+    assert isinstance(pid, int) and st.context("BOP").table_aliases.get(("BOP", "BAZ")) is None
+    tid = st.confirm(pid, "u3")
+    assert st.get(pid)["status"] == "PROMOTED" and st.context("BOP").alias_for("BOP", "BAZ") == "BOP:9"
+    assert st.retire(tid) and st.context("BOP").alias_for("BOP", "BAZ") is None              # removal from the team file
+    # sharing: a second machine imports as PROPOSED and must confirm
+    out = tmp_path / "shared.yaml"
     assert st.export_yaml(out) == 1
+    monkeypatch.setenv("RGL_TEAM_MAPPINGS", str(tmp_path / "other_team.yaml"))
     other = LearningStore(tmp_path / "l2.db")
     other.import_yaml(out)
-    assert other.list(status="PROPOSED") and not other.list(status="CONFIRMED")            # needs local confirmation
+    assert other.list(status="PROPOSED") and other.confirmed_items() == []
     assert other.context("BOP").table_aliases == {}
     try:
         st.add("MAGIC_TOLERANCE", "x", {})                      # only allow-listed kinds can be learned
         raise AssertionError("should have been rejected")
     except Exception as exc:
         assert "not a learnable" in str(exc)
+
+
+def test_bad_team_file_is_a_clear_error(tmp_path, monkeypatch):
+    bad = tmp_path / "t.yaml"
+    bad.write_text("rateguard_lite_mappings: 1\nitems:\n  - {kind: MAGIC, key: x, value: {}}\n", encoding="utf-8")
+    monkeypatch.setenv("RGL_TEAM_MAPPINGS", str(bad))
+    with pytest.raises(RGLError, match="Invalid entry"):
+        LearningStore(tmp_path / "l.db").context("BOP")
 
 
 def test_false_positive_is_only_a_hint(scenario, tmp_path):
@@ -105,7 +133,7 @@ def test_false_positive_is_only_a_hint(scenario, tmp_path):
 
 
 def test_snapshot_flow_second_run_uses_baseline(gen_dir, tmp_path):
-    """First run -> PASS_WITH_LIMITATIONS, accepted -> next edition's run gets scope checks from the snapshot."""
+    """Opt-in Snapshot History (--profile snapshots): a taken snapshot becomes the next run's baseline."""
     sc = g.build_scenario("snapshot_first_run_limitations", gen_dir / "snapflow", tables=25)
     with data_dir_env(tmp_path / "d"):
         # run 1 on the prior edition export accepted as snapshot
@@ -114,9 +142,12 @@ def test_snapshot_flow_second_run_uses_baseline(gen_dir, tmp_path):
         g.write_export(prior, old, g.OLD_EDITION, g.OLD_EFF, rng_seed=2)
         r = CliRunner().invoke(app, ["snapshot", "take", "--export", str(prior)])
         assert r.exit_code == 0, r.output
-        r2 = run_reconciliation(RunOptions(sc.approved, sc.jira, sc.export, tmp_path / "o", None, user="t"))
+        r2 = run_reconciliation(RunOptions(sc.approved, sc.jira, sc.export, tmp_path / "o", None, user="t", profile="snapshots"))
         assert r2.baseline_info["mode"] == "snapshot" and r2.verdict.value == "PASS"
-        assert "snapshot" in r2.summary["baseline"]
+        assert "snapshot" in r2.summary["baseline"] and r2.summary["scope_check_performed"]
+        # default profile: Snapshot History is off, so the snapshot is ignored and nothing new is saved
+        r3 = run_reconciliation(RunOptions(sc.approved, sc.jira, sc.export, tmp_path / "o3", None, user="t"))
+        assert r3.baseline_info["mode"] == "none" and r3.snapshot_id is None and not r3.summary["scope_check_performed"]
 
 
 def test_cli_exit_codes_and_overwrite(scenario, tmp_path):
@@ -149,3 +180,34 @@ def test_inspect_and_sample(gen_dir, tmp_path, scenario):
     assert r2.exit_code == 0 and (tmp_path / "s" / "clean_pass" / "approved.xlsx").exists()
     shutil.rmtree(tmp_path / "s")
     assert Path(os.environ["RGL_DATA_DIR"]).exists()
+
+
+def test_review_cli_writes_team_file_with_user_and_date(gen_dir, tmp_path, monkeypatch):                # D-024 (4)
+    team = tmp_path / "team.yaml"
+    monkeypatch.setenv("RGL_TEAM_MAPPINGS", str(team))
+    sc = g.build_scenario("unmappable_table_blocked", gen_dir / "review", tables=25)
+    with data_dir_env(tmp_path / "d"):
+        monkeypatch.setenv("RGL_TEAM_MAPPINGS", str(team))
+        r1 = run_reconciliation(RunOptions(sc.approved, sc.jira, sc.export, tmp_path / "o1", sc.baseline, user="t", write_reports=True))
+        assert r1.verdict.value == "BLOCKED"
+        picks = "\n".join(str(1 + next(i for i, c in enumerate(p["candidates"]) if want in c["names"]))
+                          for p in [q for q in r1.proposals if q.get("status") == "NEEDS_MAPPING"]
+                          for want in [{"Ded Schedule Adj": "Deductible Factor", "Terr Rel Adj": "Territory Factor"}[p["approved"]]]) + "\n"
+        res = CliRunner().invoke(app, ["map", "--run", str(tmp_path / "o1"), "--user", "qa.lead"], input=picks)
+        assert res.exit_code == 0, res.output
+        items = yaml.safe_load(team.read_text(encoding="utf-8"))["items"]
+        assert items and all(i["confirmed_by"] == "qa.lead" and i["confirmed_on"] == date.today().isoformat() for i in items)
+        assert LearningStore().list(status="CONFIRMED") == []
+        r2 = run_reconciliation(RunOptions(sc.approved, sc.jira, sc.export, tmp_path / "o2", sc.baseline, user="t"))
+        assert r2.verdict.value == "PASS" and any(u.get("source") == "team" for u in r2.learned_used)
+
+
+def test_no_end_of_run_snapshot_prompt_and_accept_flag_still_works(scenario, tmp_path):                  # D-024 (1)
+    sc = scenario("clean_pass")
+    base = ["run", "--approved", str(sc.approved), "--jira", str(sc.jira), "--export", str(sc.export), "--baseline", str(sc.baseline)]
+    with data_dir_env(tmp_path / "d"):
+        res = CliRunner().invoke(app, base + ["--out", str(tmp_path / "o1")], input="y\n")
+        assert res.exit_code == 0 and "Accept this export" not in res.output and "Snapshot" not in res.output
+        res2 = CliRunner().invoke(app, base + ["--out", str(tmp_path / "o2"), "--accept-snapshot"])
+        assert res2.exit_code == 0 and "accepted as the next baseline" in res2.output
+        assert SnapshotStore().list()[0].status == "VERIFIED"

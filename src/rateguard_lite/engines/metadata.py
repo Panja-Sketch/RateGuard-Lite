@@ -59,3 +59,49 @@ def audit_metadata(export: RateBook, approved: RateBook | None, baseline_meta: d
             out.append(make_finding("EFFECTIVE_DATE_MISMATCH", severity=Severity.WARNING, approved_value=ad, export_value=fd,
                                     message=f"The approved workbook's info sheet shows effective date {ad}, not the Jira filing date {fd}."))
     return out
+
+
+def out_of_scope_dated(pairs: list[TablePair], export: RateBook, jira: JiraScope) -> tuple[list[Finding], list[str]]:
+    """OUT_OF_SCOPE_TABLE_DATED (D-024): an export table that is neither in the approved file nor in Jira, yet carries the
+    filing effective date or the export's new edition in its own metadata, may have been touched or loaded by mistake.
+
+    Returns (findings, notes). Notes go to the run manifest. If a stamp is absent everywhere, or identical on every table
+    (a book-level stamp that says nothing about an individual table), that stamp is skipped silently.
+    """
+    notes: list[str] = []
+    stamps = {"effective_date": jira.filing_effective_date, "edition": (export.metadata.get("edition") or "").strip().upper() or None}
+    per_table: dict[str, dict[str, str]] = {}
+    for p in pairs:
+        if p.export is None:
+            continue
+        per_table[p.id] = {k: (p.export.metadata.get(k) or "").strip() for k in stamps}
+    active: list[str] = []
+    for k, target in stamps.items():
+        values = [v[k] for v in per_table.values() if v[k]]
+        if not values:
+            notes.append(f"{k}: the export has no per-table values; check skipped.")
+        elif target is None:
+            notes.append(f"{k}: no reference value (Jira filing date / export edition); check skipped.")
+        elif len(set(values)) == 1:
+            notes.append(f"{k}: every table carries the same value, so it cannot single out a table; check skipped.")
+        else:
+            active.append(k)
+    out: list[Finding] = []
+    if not active:
+        return out, notes
+    for p in pairs:
+        if p.export is None or p.approved is not None or p.jira:
+            continue
+        hits = []
+        for k in active:
+            v, target = per_table[p.id][k], stamps[k]
+            if v and target and (v.upper() if k == "edition" else v) == target:
+                hits.append(("effective date" if k == "effective_date" else "edition", v))
+        if hits:
+            what = " and ".join(f"{n} {v}" for n, v in hits)
+            out.append(make_finding(
+                "OUT_OF_SCOPE_TABLE_DATED", status=Status.NEEDS_REVIEW, table_id=p.id, table_name=p.display,
+                export_value="; ".join(v for _, v in hits), export_ref=f"{p.export.source.file}!{p.export.source.sheet}",
+                message=f"This table is not in the approved workbook or the Jira story, but its own metadata shows {what}, the same as this filing."))
+    notes.append(f"checked {len(per_table)} export table(s) on: {', '.join(active)}; {len(out)} flagged.")
+    return out, notes

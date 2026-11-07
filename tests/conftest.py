@@ -9,6 +9,7 @@ from rateguard_lite.guard.netguard import install_socket_guard
 install_socket_guard()
 _DATA = tempfile.mkdtemp(prefix="rgl_test_data_")
 os.environ["RGL_DATA_DIR"] = _DATA
+os.environ["RGL_TEAM_MAPPINGS"] = str(Path(_DATA) / "team_mappings.yaml")     # never touch the repo-level file
 
 
 @pytest.fixture(scope="session")

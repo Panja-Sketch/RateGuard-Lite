@@ -1,4 +1,8 @@
-"""Local learning store (spec 9). SQLite, append-only versioning, user-confirmed, never silent.
+"""Learning store (spec 9, D-024). Never silent, always user-confirmed.
+
+CONFIRMED items live in the repo-level team file (config/team_mappings.yaml, see team.py) and are shared through git.
+The local SQLite store keeps only PROPOSED items and run history. (Rows with status CONFIRMED from an older database
+are still honoured so nothing breaks; the team file wins on conflict.)
 
 Learning changes how inputs are READ AND MAPPED. It never changes comparison math, tolerances,
 severities, or turns a FAIL into a PASS.
@@ -17,6 +21,7 @@ import yaml
 
 from ..config import data_dir
 from ..errors import RGLError
+from . import team
 from .context import LearnedContext
 
 KINDS = {"TABLE_ALIAS", "COLUMN_SYNONYM", "COLUMN_ROLE", "WILDCARD_TOKEN", "LAYOUT_FINGERPRINT", "RANGE_CONVENTION",
@@ -58,46 +63,73 @@ class LearningStore:
 
     # ------------------------------------------------------------ items
     def add(self, kind: str, key: str, value: dict[str, Any], *, scope_lob: str | None = None, scope_table: str | None = None,
-            status: str = "PROPOSED", user: str | None = None, run_id: str | None = None, evidence: dict[str, Any] | None = None) -> int:
+            status: str = "PROPOSED", user: str | None = None, run_id: str | None = None, evidence: dict[str, Any] | None = None) -> int | str:
+        """PROPOSED -> a row in the local store (returns its int id). CONFIRMED -> an entry in the team file (returns 'T-xxxxxx')."""
         if kind not in KINDS:
             raise RGLError(f"'{kind}' is not a learnable item kind.", next_step=f"Allowed: {', '.join(sorted(KINDS))}")
         user = user or current_user()
-        dup = self.db.execute("SELECT id, status FROM learned_item WHERE kind=? AND key=? AND IFNULL(scope_lob,'')=IFNULL(?,'') AND "
-                              "IFNULL(scope_table,'')=IFNULL(?,'') AND status IN ('PROPOSED','CONFIRMED') AND value_json=?",
+        if status == "CONFIRMED":
+            tid = team.upsert(kind, key, value, scope_lob=scope_lob, scope_table=scope_table, user=user, source_run_id=run_id)
+            self._mark_promoted(kind, key, scope_lob, scope_table, value)
+            return tid
+        dup = self.db.execute("SELECT id FROM learned_item WHERE kind=? AND key=? AND IFNULL(scope_lob,'')=IFNULL(?,'') AND "
+                              "IFNULL(scope_table,'')=IFNULL(?,'') AND status='PROPOSED' AND value_json=?",
                               (kind, key, scope_lob, scope_table, json.dumps(value, sort_keys=True))).fetchone()
         if dup:
-            if status == "CONFIRMED" and dup["status"] == "PROPOSED":
-                self.confirm(dup["id"], user)
             return int(dup["id"])
-        # a different value for the same key supersedes (retires) the old one - append-only
-        old = self.db.execute("SELECT id, version FROM learned_item WHERE kind=? AND key=? AND IFNULL(scope_lob,'')=IFNULL(?,'') AND "
-                              "IFNULL(scope_table,'')=IFNULL(?,'') AND status='CONFIRMED'", (kind, key, scope_lob, scope_table)).fetchone()
-        version = (old["version"] + 1) if old else 1
         cur = self.db.execute(
             "INSERT INTO learned_item(kind,scope_lob,scope_table,key,value_json,status,created_by,created_at,source_run_id,evidence_json,version,supersedes) "
             "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
             (kind, scope_lob, scope_table, key, json.dumps(value, sort_keys=True), "PROPOSED", user, now(), run_id,
-             json.dumps(evidence or {}), version, old["id"] if old else None))
+             json.dumps(evidence or {}), 1, None))
         self.db.commit()
-        new_id = int(cur.lastrowid or 0)
-        if status == "CONFIRMED":
-            self.confirm(new_id, user)
-        return new_id
+        return int(cur.lastrowid or 0)
 
-    def confirm(self, item_id: int, user: str | None = None) -> None:
+    def _mark_promoted(self, kind: str, key: str, scope_lob: str | None, scope_table: str | None, value: dict[str, Any]) -> None:
+        self.db.execute("UPDATE learned_item SET status='PROMOTED' WHERE kind=? AND key=? AND IFNULL(scope_lob,'')=IFNULL(?,'') AND "
+                        "IFNULL(scope_table,'')=IFNULL(?,'') AND status='PROPOSED' AND value_json=?",
+                        (kind, key, scope_lob, scope_table, json.dumps(value, sort_keys=True)))
+        self.db.commit()
+
+    def confirm(self, item_id: int, user: str | None = None) -> str:
+        """Promote a PROPOSED row into the team file. Returns the team item id."""
         user = user or current_user()
         row = self.db.execute("SELECT * FROM learned_item WHERE id=?", (item_id,)).fetchone()
         if row is None:
-            raise RGLError(f"Learned item {item_id} not found.")
-        if row["supersedes"]:
-            self.db.execute("UPDATE learned_item SET status='RETIRED' WHERE id=?", (row["supersedes"],))
-        self.db.execute("UPDATE learned_item SET status='CONFIRMED', confirmed_by=?, confirmed_at=? WHERE id=?", (user, now(), item_id))
+            raise RGLError(f"Learned item {item_id} not found.", next_step="Run `rgl learn list --status PROPOSED`.")
+        if row["status"] != "PROPOSED":
+            raise RGLError(f"Item {item_id} is {row['status']}, not PROPOSED.")
+        tid = team.upsert(row["kind"], row["key"], json.loads(row["value_json"]), scope_lob=row["scope_lob"], scope_table=row["scope_table"],
+                          user=user, source_run_id=row["source_run_id"])
+        self.db.execute("UPDATE learned_item SET status='PROMOTED', confirmed_by=?, confirmed_at=? WHERE id=?", (user, now(), item_id))
         self.db.commit()
+        return tid
 
-    def retire(self, item_id: int, user: str | None = None) -> None:
-        self.db.execute("UPDATE learned_item SET status='RETIRED', confirmed_by=COALESCE(confirmed_by, ?) WHERE id=?",
-                        (user or current_user(), item_id))
+    def retire(self, item_id: int | str, user: str | None = None) -> bool:
+        """Retire a local proposal (int id) or remove a team entry (id like 'T-1a2b3c'). Returns False if nothing matched."""
+        if isinstance(item_id, str) and item_id.startswith("T-"):
+            return team.remove(item_id)
+        cur = self.db.execute("UPDATE learned_item SET status='RETIRED', confirmed_by=COALESCE(confirmed_by, ?) WHERE id=?",
+                              (user or current_user(), int(item_id)))
         self.db.commit()
+        return cur.rowcount > 0
+
+    def team_items(self) -> list[dict[str, Any]]:
+        """Confirmed team entries with a stable id (T-xxxxxx)."""
+        return [dict(it, id=team.item_id(it["kind"], it["key"], it.get("scope_lob"), it.get("scope_table")), source="team")
+                for it in team.load_items()]
+
+    def confirmed_items(self) -> list[dict[str, Any]]:
+        """Everything in force: team entries, plus any legacy CONFIRMED rows from an older database."""
+        out = self.team_items()
+        have = {(i["kind"], i.get("scope_lob") or "", i.get("scope_table") or "", i["key"]) for i in out}
+        for r in self.list(status="CONFIRMED"):
+            if (r["kind"], r["scope_lob"] or "", r["scope_table"] or "", r["key"]) in have:
+                continue
+            out.append({"kind": r["kind"], "scope_lob": r["scope_lob"], "scope_table": r["scope_table"], "key": r["key"],
+                        "value": json.loads(r["value_json"]), "confirmed_by": r["confirmed_by"] or r["created_by"],
+                        "confirmed_on": (r["confirmed_at"] or "")[:10], "id": r["id"], "source": "legacy-db"})
+        return out
 
     def list(self, kind: str | None = None, status: str | None = None) -> list[sqlite3.Row]:
         q, args = "SELECT * FROM learned_item WHERE 1=1", []
@@ -115,25 +147,29 @@ class LearningStore:
 
     def version_stamp(self) -> str:
         r = self.db.execute("SELECT COUNT(*) c, IFNULL(MAX(id),0) m, IFNULL(MAX(confirmed_at),'') t FROM learned_item WHERE status='CONFIRMED'").fetchone()
-        return f"{r['c']}.{r['m']}.{r['t']}"
+        base = f"{r['c']}.{r['m']}.{r['t']}"
+        ts = team.stamp()
+        return f"{base}+team:{ts}" if ts else base
 
     # ------------------------------------------------------------ run context
     def context(self, lob: str | None) -> LearnedContext:
         ctx = LearnedContext(version=self.version_stamp())
-        for r in self.list(status="CONFIRMED"):
-            if r["scope_lob"] not in (None, "", lob) and lob is not None:
+        items = self.confirmed_items()
+        for it in [i for i in items if i["source"] != "team"] + [i for i in items if i["source"] == "team"]:   # team entries last: they win
+            if it.get("scope_lob") not in (None, "", lob) and lob is not None:
                 continue
-            val = json.loads(r["value_json"])
-            kind, key, tbl = r["kind"], r["key"], r["scope_table"]
-            used = {"id": r["id"], "version": r["version"], "kind": kind, "key": key}
+            val, kind, key, tbl = it["value"], it["kind"], it["key"], it.get("scope_table")
+            used = {"id": it["id"], "version": 1, "kind": kind, "key": key, "source": it["source"]}
             if kind == "TABLE_ALIAS":
-                ctx.table_aliases[(r["scope_lob"] or lob or "", key)] = val["canonical_id"]
+                ctx.table_aliases[(it.get("scope_lob") or lob or "", key)] = val["canonical_id"]
             elif kind == "COLUMN_SYNONYM":
                 ctx.column_synonyms[key] = val["to"]
             elif kind == "COLUMN_ROLE" and tbl:
                 ctx.column_roles.setdefault(tbl, {})[key] = val["role"]
             elif kind == "WILDCARD_TOKEN" and tbl:
-                ctx.wildcard_tokens.setdefault(tbl, {}).setdefault(key, []).append(val["token"])
+                toks = ctx.wildcard_tokens.setdefault(tbl, {}).setdefault(key, [])
+                if val["token"] not in toks:
+                    toks.append(val["token"])
             elif kind == "RANGE_CONVENTION" and tbl:
                 ctx.range_conventions[tbl] = val["convention"]
             elif kind == "JIRA_PATTERN":
@@ -167,12 +203,13 @@ class LearningStore:
 
     # ------------------------------------------------------------ team sharing
     def export_yaml(self, out: Path) -> int:
-        items = [{"kind": r["kind"], "scope_lob": r["scope_lob"], "scope_table": r["scope_table"], "key": r["key"],
-                  "value": json.loads(r["value_json"])} for r in self.list(status="CONFIRMED") if r["kind"] != "FINDING_DISPOSITION"]
+        items = [{"kind": i["kind"], "scope_lob": i.get("scope_lob"), "scope_table": i.get("scope_table"), "key": i["key"], "value": i["value"]}
+                 for i in self.confirmed_items()]
         Path(out).write_text(yaml.safe_dump({"rateguard_lite_mappings": 1, "items": items}, sort_keys=False), encoding="utf-8")
         return len(items)
 
     def import_yaml(self, path: Path, trust: bool = False, user: str | None = None) -> int:
+        """Another team's mappings file: PROPOSED by default (confirm each with `rgl learn confirm`); --trust writes them to the team file."""
         data = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
         if data.get("rateguard_lite_mappings") != 1:
             raise RGLError("Not a RateGuard-Lite mappings file.", where=Path(path).name)
@@ -194,7 +231,7 @@ class LearningStore:
             manual.append(m.get("manual_mappings", 0))
         items = self.list()
         proposed = sum(1 for i in items if i["status"] != "PROPOSED")
-        confirmed = sum(1 for i in items if i["status"] in ("CONFIRMED", "RETIRED"))
+        confirmed = sum(1 for i in items if i["status"] in ("CONFIRMED", "RETIRED", "PROMOTED"))
         fp = {row[0]: row[1] for row in self.db.execute("SELECT rule_id, COUNT(*) FROM finding_disposition WHERE disposition='FALSE_POSITIVE' GROUP BY rule_id")}
         tot_disp = {row[0]: row[1] for row in self.db.execute("SELECT rule_id, COUNT(*) FROM finding_disposition GROUP BY rule_id")}
         med = sorted(manual)[len(manual) // 2] if manual else 0

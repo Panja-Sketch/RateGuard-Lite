@@ -36,8 +36,13 @@ class CompletenessCfg(_Strict):
 
 
 class SnapshotsCfg(_Strict):
-    enabled: bool = True
+    enabled: bool = False          # D-024: opt-in; the same rate book rarely changes twice
     retention_runs: int = 20
+
+
+class VerdictCfg(_Strict):
+    # D-024: False = a run with no baseline can still PASS (scope check is reported as "not performed").
+    require_baseline_for_pass: bool = False
 
 
 class DatesCfg(_Strict):
@@ -81,6 +86,7 @@ class Config(_Strict):
     comparison: ComparisonCfg = Field(default_factory=ComparisonCfg)
     completeness: CompletenessCfg = Field(default_factory=CompletenessCfg)
     snapshots: SnapshotsCfg = Field(default_factory=SnapshotsCfg)
+    verdict: VerdictCfg = Field(default_factory=VerdictCfg)
     dates: DatesCfg = Field(default_factory=DatesCfg)
     limits: LimitsCfg = Field(default_factory=LimitsCfg)
     mapping: MappingCfg = Field(default_factory=MappingCfg)

@@ -58,8 +58,23 @@ def apply_decision(store: LearningStore, p: dict[str, Any], decision: str, choic
                 store.add("TABLE_ALIAS", name_key(nm), {"canonical_id": cid}, scope_lob=lob, status="CONFIRMED", user=user, run_id=run_id,
                           evidence={"name": nm})
                 n += 1
-        return f"confirmed table alias ({n} name(s) -> {cid})"
+        return f"confirmed table alias ({n} name(s) -> {cid}); saved to the team mappings file"
     if kind == "HIDDEN_SHEET":
         store.add("LAYOUT_FINGERPRINT", p["sheet"], {"hidden_sheet": True}, scope_lob=lob, status="CONFIRMED", user=user, run_id=run_id)
-        return "hidden sheet will be used from now on"
+        return "hidden sheet will be used from now on; saved to the team mappings file"
     return "no automatic action for this proposal type in v1 (see the admin guide)"
+
+
+def propose(store: LearningStore, p: dict[str, Any], user: str | None = None) -> int:
+    """Skipped proposals are kept locally as PROPOSED (never in force) so they can be confirmed later with `rgl learn confirm`."""
+    if p.get("kind") != "TABLE_ALIAS" or p.get("status") == "NEEDS_MAPPING" or not p.get("canonical_id"):
+        return 0
+    names = list(p.get("approved_names") or ([p["approved"]] if p.get("approved") else [])) + \
+        list(p.get("export_names") or ([p["export"]] if p.get("export") else []))
+    n = 0
+    for nm in names:
+        if nm:
+            store.add("TABLE_ALIAS", name_key(nm), {"canonical_id": p["canonical_id"]}, scope_lob=p.get("lob") or "", status="PROPOSED",
+                      user=user, run_id=p.get("run_id"), evidence={"name": nm})
+            n += 1
+    return n

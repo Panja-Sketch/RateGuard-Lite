@@ -7,7 +7,7 @@ import logging
 import time
 from collections import Counter
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -18,7 +18,7 @@ from .engines.baseline import Delta, run_baseline
 from .engines.checks import completeness_findings, integrity_findings
 from .engines.common import make_finding, table_hash
 from .engines.factors import FactorResult, compare_pair, emit_row_findings
-from .engines.metadata import audit_metadata
+from .engines.metadata import audit_metadata, out_of_scope_dated
 from .engines.ranges import boundary_shifts, check_ranges
 from .engines.scope import scope_findings, scope_matrix
 from .errors import UnsafeInputError
@@ -38,6 +38,8 @@ log = logging.getLogger("rgl")
 SCOPE_RULES = {"BYPASS_VIOLATION", "UNDECLARED_CHANGE", "MISSING_UPDATE", "REMOVE_NOT_APPLIED", "APPROVED_FILE_MISSING_TABLE",
                "TABLE_MISSING_IN_EXPORT"}
 DECLARED = {"ADD", "MODIFY", "REPLACE"}
+SCOPE_CHECK_SKIPPED = "Scope check (tables outside approved/Jira): not performed – no baseline provided"
+SCOPE_CHECK_DONE = "Scope check (tables outside approved/Jira): performed against {b}"
 
 
 @dataclass
@@ -88,6 +90,7 @@ class RunResult:
     user: str = ""
     learned_version: str = "0"
     lob: str = ""
+    check_notes: dict[str, Any] = field(default_factory=dict)
 
     def to_report(self) -> Report:
         return Report(
@@ -136,7 +139,8 @@ def run_reconciliation(opts: RunOptions, progress: Callable[[str], None] | None 
     handler = _setup_log(opts.out, opts.debug)
     user = opts.user or current_user()
     lstore = LearningStore()
-    snap = SnapshotStore() if cfg.snapshots.enabled else None
+    # D-024: Snapshot History is opt-in (config, a profile, or --accept-snapshot).
+    snap = SnapshotStore() if (cfg.snapshots.enabled or opts.accept_snapshot) else None
     try:
         log.info("run started; tool %s; config %s", __version__, chash)
 
@@ -228,12 +232,11 @@ def run_reconciliation(opts: RunOptions, progress: Callable[[str], None] | None 
             say("Comparing against the baseline")
             bf, deltas, statuses = run_baseline(pairs, fres, baseline_info["label"])
             findings += bf
-        else:
+        elif cfg.verdict.require_baseline_for_pass:
             findings.append(make_finding(
                 "NOT_EVALUATED_NO_BASELINE", status=Status.NOT_EVALUATED,
                 message="No baseline available: all approved values were verified, but changes to other tables, bypassed tables and missing updates were not checked.",
-                suggested_fix="Supply --baseline <prior export>, or accept this run as a snapshot (--accept-snapshot) so the next run has a baseline. "
-                              "QA can also run `rgl snapshot take --export <file>` before development starts."))
+                suggested_fix="Supply --baseline <prior export>. (This profile requires a baseline for a plain PASS: verdict.require_baseline_for_pass.)"))
         s = stage("baseline_delta", s)
 
         # ---- integrity (scope-limited on export side) and range checks
@@ -267,6 +270,9 @@ def run_reconciliation(opts: RunOptions, progress: Callable[[str], None] | None 
         for i in approved_ing.info + export_ing.info:
             findings.append(make_finding("VBA_PRESENT" if "VBA" in i else "INPUT_INFO", severity=Severity.INFO, message=i,
                                          explanation="Informational note about an input file.", suggested_fix="No action needed."))
+        oos, oos_notes = out_of_scope_dated(pairs, export_ing.book, jira)
+        findings += oos
+        check_notes = {"out_of_scope_table_dated": oos_notes}
         s = stage("scope_metadata", s)
 
         # learning hints (informational only; findings still count)
@@ -293,6 +299,8 @@ def run_reconciliation(opts: RunOptions, progress: Callable[[str], None] | None 
             "renewal_effective_date": jira.renewal_effective_date,
             "rate_book": exp_meta.get("rate_book_code"), "export_edition": exp_meta.get("edition"), "export_effective_date": exp_meta.get("effective_date"),
             "baseline": baseline_info["label"],
+            "scope_check": SCOPE_CHECK_DONE.format(b=baseline_info["label"]) if baseline_book is not None else SCOPE_CHECK_SKIPPED,
+            "scope_check_performed": baseline_book is not None,
             "tables_in_export": len(export_ing.book.tables), "tables_in_approved": len(approved_ing.book.tables),
             "tables_analyzed": len(analyzed), "tables_matched": len(matched), "tables_with_discrepancies": len(by_table_bad),
             "scope_violations": len(scope_bad),
@@ -323,6 +331,7 @@ def run_reconciliation(opts: RunOptions, progress: Callable[[str], None] | None 
             warnings=approved_ing.warnings + export_ing.warnings, info=approved_ing.info + export_ing.info, proposals=proposals,
             learned_used=learned.used, tolerance_notes=sorted(set(tol_notes)), timings=timings, cfg=cfg, cfg_hash=chash,
             approved_ing=approved_ing, export_ing=export_ing, out=opts.out, user=user, learned_version=learned.version, lob=lob,
+            check_notes=check_notes,
         )
         # ---- scenarios
         from .tests_gen.generate import generate_tests

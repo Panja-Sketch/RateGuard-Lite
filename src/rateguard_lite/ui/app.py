@@ -90,23 +90,24 @@ with tab_run:
         up_jira = st.file_uploader("2 · Jira story", type=["txt", "md", "html", "htm"])
     with c2:
         up_exp = st.file_uploader("3 · Guidewire export (after implementation)", type=["xlsx"])
-        up_base = st.file_uploader("4 · Baseline export (optional)", type=["xlsx"], help="The prior edition. If you skip it, the tool uses its own snapshot history when available.")
+        up_base = st.file_uploader("4 · Baseline export (optional)", type=["xlsx"], help="The prior edition. If you skip it, the scope check for tables outside the approved file and Jira is not performed.")
     o1, o2, o3 = st.columns([1, 1, 2])
     lob = o1.text_input("LOB override", "", placeholder="e.g. BOP")
     state = o2.text_input("State override", "", placeholder="e.g. OR", max_chars=2)
-    accept = o3.checkbox("If it passes, accept this export as the baseline for the next run", value=False)
+    snaps_on = load_config().snapshots.enabled
+    accept = o3.checkbox("If it passes, accept this export as the baseline for the next run", value=False) if snaps_on else False
     go = st.button("Run reconciliation", type="primary", disabled=not (up_appr and up_jira and up_exp))
     if go and up_appr and up_jira and up_exp:
         out = _session_dir() / f"out_{int(time.time())}"
         with st.status("Running...", expanded=True) as status:
             try:
-                res = run_reconciliation(
+                run_res = run_reconciliation(
                     RunOptions(_save_upload(up_appr, "approved"), _save_upload(up_jira, "jira"), _save_upload(up_exp, "export"), out,
                                _save_upload(up_base, "baseline") if up_base else None, lob or None, state or None, accept_snapshot=accept),
                     progress=lambda m: status.write(m))
-                st.session_state["res"] = res
+                st.session_state["res"] = run_res
                 st.session_state["out"] = str(out)
-                status.update(label=f"Done: {res.verdict.value}", state="complete")
+                status.update(label=f"Done: {run_res.verdict.value}", state="complete")
             except RGLError as exc:
                 status.update(label="Could not continue", state="error")
                 st.error(f"**What:** {exc.what}\n\n**Where:** {exc.where or '-'}\n\n**Next:** {exc.next_step or '-'}")
@@ -144,13 +145,7 @@ with tab_run:
             if f.exists():
                 col.download_button(label, f.read_bytes(), file_name=name, mime=mime, width="stretch")
         if res.snapshot_id and v in (Verdict.PASS, Verdict.PASS_WITH_WARNINGS, Verdict.PASS_WITH_LIMITATIONS):
-            if st.button("Accept this export as the baseline for the next run"):
-                sn = SnapshotStore()
-                try:
-                    sn.accept(res.snapshot_id)
-                    st.success("Snapshot accepted.")
-                finally:
-                    sn.close()
+            st.caption(f"Snapshot {res.snapshot_id} recorded. Accept it from the CLI with `rgl snapshot accept {res.snapshot_id}`.")
 
 # ============================================================ REVIEW & LEARN
 with tab_review:
@@ -176,13 +171,15 @@ with tab_review:
                     st.info(apply_decision(store, p, "reject"))
         st.caption("Learning only changes how files are read and mapped. It never changes comparison results or verdicts.")
         st.subheader("Learned items")
-        items = store.list()
-        st.dataframe([{"ID": r["id"], "Kind": r["kind"], "LOB": r["scope_lob"], "Table": r["scope_table"], "Key": r["key"], "Value": r["value_json"], "Status": r["status"],
-                       "By": r["confirmed_by"] or r["created_by"], "v": r["version"]} for r in items], width="stretch", hide_index=True)
-        rid = st.number_input("Retire item ID", min_value=0, step=1)
-        if st.button("Retire") and rid:
-            store.retire(int(rid))
-            st.success(f"Item {int(rid)} retired. Reload to refresh.")
+        st.caption("Confirmed items are stored in config/team_mappings.yaml (commit it to share with the team). Proposals stay local.")
+        learned_rows: list[dict[str, Any]] = [{"ID": i["id"], "Kind": i["kind"], "LOB": i.get("scope_lob"), "Table": i.get("scope_table"), "Key": i["key"], "Value": str(i["value"]),
+                 "Status": "CONFIRMED", "By": i.get("confirmed_by"), "On": i.get("confirmed_on")} for i in store.confirmed_items()]
+        learned_rows += [{"ID": r["id"], "Kind": r["kind"], "LOB": r["scope_lob"], "Table": r["scope_table"], "Key": r["key"], "Value": r["value_json"], "Status": r["status"],
+                  "By": r["created_by"], "On": (r["created_at"] or "")[:10]} for r in store.list(status="PROPOSED")]
+        st.dataframe(learned_rows, width="stretch", hide_index=True)
+        rid = st.text_input("Remove / retire item ID", "", placeholder="T-1a2b3c (team mapping) or a number (local proposal)")
+        if st.button("Retire") and rid.strip():
+            st.success(f"Item {rid.strip()} retired. Reload to refresh.") if store.retire(rid.strip()) else st.warning("No such item.")
     finally:
         store.close()
 
@@ -201,6 +198,8 @@ with tab_hist:
             st.line_chart(stt["manual_mappings_over_time"], height=160)
             st.caption("Manual mappings per run. A falling line means the tool is learning your naming.")
         st.subheader("Snapshot history")
+        if not load_config().snapshots.enabled:
+            st.caption("Snapshot History is off (opt-in; see snapshots.enabled in config). Existing snapshots, if any, are listed below.")
         st.dataframe([{"Snapshot": s.id, "Rate book": s.book_key, "Edition": s.edition, "Effective": s.effective_date, "Status": s.status, "Verdict": s.verdict,
                        "Tables": s.tables, "Taken": s.taken_at[:16], "Accepted by": s.accepted_by} for s in snaps.list()], width="stretch", hide_index=True)
         runs = list(store.db.execute("SELECT id, started_at, verdict, tool_version FROM run ORDER BY started_at DESC LIMIT 50"))
