@@ -1,0 +1,32 @@
+comparison:
+  default_scale: 4
+  precision_materiality: 0.0005
+  magnitude_ratio: 5
+  abs_tolerance: 0          # per-table overrides allowed; printed in report
+  table_overrides: {}       # e.g. {"BOP:121": {abs_tolerance: 0.0001, scale: 5}}
+completeness:
+  mode: FULL                # only FULL supported in v1
+  small_table_ratio: 0.50
+snapshots:
+  enabled: true
+  retention_runs: 20
+dates:
+  order: US_MDY
+limits:
+  max_file_mb: 100
+  max_unzipped_mb: 500
+  max_cells: 2000000
+  max_header_scan_rows: 30
+mapping:
+  suggest_threshold: 0.80
+  suggest_margin: 0.10
+approved:
+  strikethrough_means: review   # review | delete
+metadata:
+  edition_not_incremented_severity: WARNING   # WARNING | HIGH
+jira:
+  llm:
+    enabled: false
+    endpoint: "http://127.0.0.1:11434"
+tests:
+  max_per_table: 25

@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rateguard-lite"
+version = "1.0.0"
+description = "Local, offline verification of Guidewire rate book exports against approved rate workbooks and Jira stories."
+requires-python = ">=3.11"
+dependencies = [
+  "openpyxl>=3.1",
+  "defusedxml>=0.7",
+  "pydantic>=2.5",
+  "rapidfuzz>=3.5",
+  "beautifulsoup4>=4.12",
+  "lxml>=5.0",
+  "typer>=0.12",
+  "rich>=13",
+  "jinja2>=3.1",
+  "pyyaml>=6",
+  "streamlit>=1.35",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-cov", "hypothesis", "ruff", "mypy", "types-PyYAML"]
+
+[project.scripts]
+rgl = "rateguard_lite.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+rateguard_lite = ["config/*.yaml", "config/profiles/*.yaml", "report/templates/*.html"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q -m \"not slow\""
+markers = ["slow: performance acceptance tests (pytest -m slow)"]
+
+[tool.ruff]
+line-length = 160
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["E501", "B008", "UP007", "UP045"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E731", "B017"]
+
+[tool.mypy]
+python_version = "3.11"
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["lxml.*", "streamlit.*"]
+ignore_missing_imports = true

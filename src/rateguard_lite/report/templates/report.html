@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RateGuard-Lite — {{ s.ticket or 'Rate book' }} {{ verdict }}</title>
+<style>
+:root{
+  --bg:#f4f6f9; --surface:#ffffff; --ink:#0b1f3a; --muted:#5b6b82; --line:#dfe5ee; --brand:#0b1f3a; --accent:#0e9aa7;
+  --pass:#067647; --pass-bg:#e7f6ee; --warn:#b54708; --warn-bg:#fff4e5; --fail:#b42318; --fail-bg:#fdecea;
+  --review:#5b3fd1; --review-bg:#efebfd; --block:#7f1d1d; --block-bg:#f9e3e3; --info:#475467; --info-bg:#eef1f5;
+  --shadow:0 1px 2px rgba(11,31,58,.06),0 4px 16px rgba(11,31,58,.05);
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#0a1424; --surface:#111d33; --ink:#e8eef8; --muted:#93a4bf; --line:#22324d; --brand:#0a1424; --accent:#35c3d1;
+  --pass:#47d18c; --pass-bg:#0f2e22; --warn:#f6a860; --warn-bg:#33230f; --fail:#ff8a7d; --fail-bg:#3a1714;
+  --review:#b7a6ff; --review-bg:#241d4d; --block:#ff9d9d; --block-bg:#3a1414; --info:#a9b6c9; --info-bg:#1a2842;
+  --shadow:none;}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+header.top{background:var(--brand);color:#fff;padding:14px 28px;display:flex;align-items:center;gap:14px}
+header.top svg{flex:none}
+header.top .name{font-weight:700;letter-spacing:.2px;font-size:16px}
+header.top .name span{color:#7ee0ea;font-weight:500}
+header.top .run{margin-left:auto;font-size:12px;opacity:.75;text-align:right}
+main{max-width:1280px;margin:0 auto;padding:24px 28px 56px}
+.hero{background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:22px 26px;display:flex;gap:24px;align-items:center;flex-wrap:wrap;border-left:8px solid var(--info)}
+.hero.pass{border-left-color:var(--pass)} .hero.pass_with_warnings,.hero.pass_with_limitations{border-left-color:var(--warn)}
+.hero.fail{border-left-color:var(--fail)} .hero.needs_review{border-left-color:var(--review)} .hero.blocked{border-left-color:var(--block)}
+.chip{display:inline-block;padding:3px 10px;border-radius:999px;font-weight:700;font-size:12px;letter-spacing:.4px;white-space:nowrap}
+.chip.v{font-size:15px;padding:6px 16px}
+.pass .chip.v,.chip.l-PASS{background:var(--pass-bg);color:var(--pass)}
+.pass_with_warnings .chip.v,.pass_with_limitations .chip.v{background:var(--warn-bg);color:var(--warn)}
+.fail .chip.v{background:var(--fail-bg);color:var(--fail)} .needs_review .chip.v{background:var(--review-bg);color:var(--review)}
+.blocked .chip.v{background:var(--block-bg);color:var(--block)}
+.l-BLOCKER{background:var(--block-bg);color:var(--block)} .l-CRITICAL{background:var(--fail-bg);color:var(--fail)}
+.l-HIGH{background:var(--warn-bg);color:var(--warn)} .l-NEEDS_MAPPING,.l-NEEDS_REVIEW{background:var(--review-bg);color:var(--review)}
+.l-NOT_EVALUATED{background:var(--info-bg);color:var(--info)} .l-WARNING{background:var(--warn-bg);color:var(--warn)} .l-INFO{background:var(--info-bg);color:var(--info)}
+.hero h1{margin:0 0 4px;font-size:22px} .hero .gate{font-size:16px;color:var(--muted)}
+.meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:6px 28px;margin-left:auto;font-size:13px}
+.meta b{color:var(--muted);font-weight:600;display:block;font-size:11px;text-transform:uppercase;letter-spacing:.5px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;margin:18px 0}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px;box-shadow:var(--shadow)}
+.kpi .n{font-size:26px;font-weight:700;line-height:1.1} .kpi .t{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.5px}
+.kpi.bad .n{color:var(--fail)} .kpi.good .n{color:var(--pass)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:18px 22px;margin-bottom:18px}
+.card h2{margin:0 0 10px;font-size:15px}
+.steps{margin:0;padding-left:20px} .steps li{margin:4px 0}
+nav.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:22px 0 14px;flex-wrap:wrap}
+nav.tabs button{background:none;border:0;color:var(--muted);padding:10px 16px;font:inherit;font-weight:600;cursor:pointer;border-bottom:3px solid transparent}
+nav.tabs button.on{color:var(--ink);border-bottom-color:var(--accent)}
+.pane{display:none} .pane.on{display:block}
+.filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.filters button{border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:4px 12px;font:inherit;font-size:12px;cursor:pointer}
+.filters button.on{background:var(--brand);color:#fff;border-color:var(--brand)}
+.filters input{margin-left:auto;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:8px;padding:6px 12px;min-width:240px;font:inherit}
+table{width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden;font-size:13px}
+th{background:var(--bg);text-align:left;padding:8px 10px;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--line);position:sticky;top:0}
+td{padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+tr.f{cursor:pointer} tr.f:hover td{background:var(--bg)}
+tr.d td{background:var(--bg);color:var(--muted);font-size:12.5px} tr.d{display:none} tr.d.open{display:table-row}
+.mono{font-family:ui-monospace,Consolas,Menlo,monospace;font-size:12px}
+.muted{color:var(--muted)} .empty{padding:26px;text-align:center;color:var(--muted)}
+.scroll{overflow-x:auto}
+footer{margin-top:30px;color:var(--muted);font-size:12px;text-align:center}
+@media (max-width:700px){main{padding:16px}.meta{margin-left:0}header.top{padding:12px 16px}}
+@media print{nav.tabs,.filters{display:none}.pane{display:block!important}}
+</style>
+</head>
+<body>
+<header class="top">
+  <svg width="30" height="34" viewBox="0 0 30 34" aria-hidden="true"><path d="M15 1 3 6v9c0 8.2 5 15.2 12 18 7-2.800 12-9.800 12-18V6z" fill="none" stroke="#7ee0ea" stroke-width="2"/><path d="M9 17.500 13.500 22 21.500 12" fill="none" stroke="#fff" stroke-width="2.600" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <div class="name">RateGuard<span>·Lite</span></div>
+  <div class="run">Run {{ r.run_id }}<br>v{{ version }} · config {{ r.cfg_hash }}</div>
+</header>
+<main>
+  <section class="hero {{ vclass }}">
+    <div>
+      <span class="chip v">{{ verdict.replace('_',' ') }}</span>
+      <h1>{{ s.ticket or 'Rate book verification' }}</h1>
+      <div class="gate">{{ gate }}</div>
+    </div>
+    <div class="meta">
+      <div><b>Line / State</b>{{ s.lob or '-' }} / {{ s.states|join(', ') or '-' }}</div>
+      <div><b>Filing effective</b>{{ s.filing_effective_date or '-' }}</div>
+      <div><b>Rate book</b>{{ s.rate_book or '-' }}</div>
+      <div><b>Export edition</b>{{ s.export_edition or '-' }}</div>
+      <div><b>Baseline</b>{{ s.baseline }}</div>
+    </div>
+  </section>
+
+  <section class="kpis">
+    <div class="kpi"><div class="n">{{ s.tables_analyzed }}</div><div class="t">Tables analyzed</div></div>
+    <div class="kpi good"><div class="n">{{ s.tables_matched }}</div><div class="t">Matched cleanly</div></div>
+    <div class="kpi {{ 'bad' if s.tables_with_discrepancies else '' }}"><div class="n">{{ s.tables_with_discrepancies }}</div><div class="t">With discrepancies</div></div>
+    <div class="kpi {{ 'bad' if s.scope_violations else '' }}"><div class="n">{{ s.scope_violations }}</div><div class="t">Scope violations</div></div>
+    <div class="kpi"><div class="n">{{ '{:,}'.format(s.cells_compared) }}</div><div class="t">Cells compared</div></div>
+    <div class="kpi"><div class="n">{{ s.rounded_matches }}</div><div class="t">Rounded matches</div></div>
+  </section>
+
+  {% if steps %}
+  <section class="card"><h2>Next steps</h2><ol class="steps">{% for t in steps %}<li>{{ t }}</li>{% endfor %}</ol></section>
+  {% elif verdict == 'PASS' %}
+  <section class="card"><h2>Next steps</h2><ol class="steps"><li>Proceed to UAT. Use <b>test_scenarios.xlsx</b> as the targeted QA script.</li></ol></section>
+  {% endif %}
+
+  <nav class="tabs" role="tablist">
+    <button class="on" data-pane="p-find">Findings ({{ findings|length }})</button>
+    <button data-pane="p-scope">Scope audit ({{ scope|length }})</button>
+    <button data-pane="p-map">Mapping ({{ mapping|length }})</button>
+    <button data-pane="p-tests">QA scenarios ({{ (tests.parameter|length + tests.transaction|length) if tests else 0 }})</button>
+    <button data-pane="p-in">Inputs &amp; notes</button>
+  </nav>
+
+  <div id="p-find" class="pane on">
+    <div class="filters" id="lvlfilters">
+      <button class="on" data-lvl="ALL">All</button>
+      {% for l in level_order %}{% if levels[l] %}<button data-lvl="{{ l }}">{{ l.replace('_',' ').title() }} · {{ levels[l] }}</button>{% endif %}{% endfor %}
+      <input type="search" id="q" placeholder="Filter by table, rule, key, value...">
+    </div>
+    <div class="scroll"><table id="ft"><thead><tr><th>Level</th><th>Rule</th><th>Table</th><th>Key</th><th>Detail</th></tr></thead><tbody>
+      {% for f in findings %}
+      <tr class="f" data-lvl="{{ f.level }}">
+        <td><span class="chip l-{{ f.level }}">{{ f.level.replace('_',' ') }}</span></td>
+        <td class="mono">{{ f.rule_id }}</td><td>{{ f.table_name or f.table_id or '-' }}</td><td>{{ f.key or '-' }}</td>
+        <td>{{ f.message }}</td>
+      </tr>
+      <tr class="d" data-lvl="{{ f.level }}"><td colspan="5">
+        {% if f.explanation %}<div><b>What it means:</b> {{ f.explanation }}</div>{% endif %}
+        {% if f.suggested_fix %}<div><b>Suggested fix:</b> {{ f.suggested_fix }}</div>{% endif %}
+        {% if f.approved_ref or f.export_ref %}<div class="mono">{{ ref_text(f) }}</div>{% endif %}
+        {% if f.details.get('hint') %}<div><b>Hint:</b> {{ f.details.get('hint') }}</div>{% endif %}
+      </td></tr>
+      {% endfor %}
+    </tbody></table></div>
+    {% if not findings %}<div class="empty">No findings. Every approved value landed correctly.</div>{% endif %}
+  </div>
+
+  <div id="p-scope" class="pane"><div class="scroll"><table><thead><tr><th>Table</th><th>In Jira</th><th>In approved</th><th>In export</th><th>Changed vs baseline</th><th>Mapping</th><th>Status</th></tr></thead><tbody>
+    {% for x in scope %}<tr><td>{{ x.table }} <span class="muted mono">{{ x.table_id }}</span></td><td>{{ x.in_jira }}</td><td>{{ x.in_approved }}</td><td>{{ x.in_export }}</td><td>{{ x.changed_vs_baseline }}</td><td>{{ x.mapping }}</td><td>{{ x.status }}</td></tr>{% endfor %}
+  </tbody></table></div>{% if not scope %}<div class="empty">No tables to show.</div>{% endif %}</div>
+
+  <div id="p-map" class="pane"><div class="scroll"><table><thead><tr><th>Table</th><th>Approved sheet</th><th>Export table</th><th>Confidence</th><th>Score</th><th>Why</th></tr></thead><tbody>
+    {% for m in mapping %}<tr><td>{{ m.table }}</td><td>{{ m.approved_sheet or '-' }}</td><td>{{ m.export or '-' }}</td><td>{{ m.confidence }}</td><td>{{ m.score }}</td><td>{{ m.reason }}</td></tr>{% endfor %}
+  </tbody></table></div></div>
+
+  <div id="p-tests" class="pane">
+    {% if tests %}
+    <div class="card"><h2>Transaction &amp; date matrix</h2><div class="scroll"><table><thead><tr><th>ID</th><th>Transaction</th><th>Policy effective</th><th>Expected rate book</th><th>Check</th></tr></thead><tbody>
+      {% for x in tests.transaction %}<tr><td class="mono">{{ x.test_id }}</td><td>{{ x.transaction }}</td><td>{{ x.policy_effective_date }}</td><td>{{ x.expected_rate_book }}</td><td>{{ x.what_to_check }}</td></tr>{% endfor %}
+    </tbody></table></div></div>
+    <div class="card"><h2>Parameter tests ({{ tests.parameter|length }})</h2><div class="scroll"><table><thead><tr><th>ID</th><th>Pri</th><th>Objective</th><th>Table</th><th>Key parameters</th><th>Expected</th></tr></thead><tbody>
+      {% for x in tests.parameter[:150] %}<tr><td class="mono">{{ x.test_id }}</td><td>{{ x.priority }}</td><td>{{ x.objective }}</td><td>{{ x.table }}</td><td>{{ x.key_parameters }}</td><td>{{ x.expected_factor }}</td></tr>{% endfor %}
+    </tbody></table></div>{% if tests.parameter|length > 150 %}<p class="muted">Showing 150 of {{ tests.parameter|length }}. The full script is in test_scenarios.xlsx.</p>{% endif %}</div>
+    <div class="card"><h2>Assumptions</h2><ul>{% for a in tests.assumptions %}<li>{{ a }}</li>{% endfor %}</ul></div>
+    {% endif %}
+  </div>
+
+  <div id="p-in" class="pane">
+    <div class="card"><h2>Input files (SHA-256)</h2><div class="scroll"><table><thead><tr><th>Role</th><th>File</th><th>SHA-256</th></tr></thead><tbody>
+      {% for i in inputs %}<tr><td>{{ i.role }}</td><td>{{ i.name }}</td><td class="mono">{{ i.sha256 }}</td></tr>{% endfor %}</tbody></table></div></div>
+    {% if warnings or info %}<div class="card"><h2>Notes</h2><ul>{% for w in warnings %}<li>{{ w }}</li>{% endfor %}{% for w in info %}<li class="muted">{{ w }}</li>{% endfor %}</ul></div>{% endif %}
+    {% if r.tolerance_notes %}<div class="card"><h2>Tolerance overrides</h2><ul>{% for t in r.tolerance_notes %}<li>{{ t }}</li>{% endfor %}</ul></div>{% endif %}
+  </div>
+
+  <footer>Generated locally by RateGuard-Lite v{{ version }}. Input documents never left this machine. This report verifies rate table contents and scope, not rating algorithms.</footer>
+</main>
+<script>
+(function(){
+  var tabs=document.querySelectorAll('nav.tabs button'),panes=document.querySelectorAll('.pane');
+  tabs.forEach(function(b){b.addEventListener('click',function(){
+    tabs.forEach(function(x){x.classList.remove('on')});panes.forEach(function(p){p.classList.remove('on')});
+    b.classList.add('on');document.getElementById(b.dataset.pane).classList.add('on');});});
+  var lvl='ALL',q='',rows=document.querySelectorAll('#ft tbody tr.f');
+  function apply(){rows.forEach(function(r){
+    var ok=(lvl==='ALL'||r.dataset.lvl===lvl)&&(!q||r.textContent.toLowerCase().indexOf(q)>-1);
+    r.style.display=ok?'':'none';var d=r.nextElementSibling;if(!ok){d.classList.remove('open');}d.style.display=ok&&d.classList.contains('open')?'table-row':'none';});}
+  document.querySelectorAll('#lvlfilters button').forEach(function(b){b.addEventListener('click',function(){
+    document.querySelectorAll('#lvlfilters button').forEach(function(x){x.classList.remove('on')});b.classList.add('on');lvl=b.dataset.lvl;apply();});});
+  var qi=document.getElementById('q');if(qi){qi.addEventListener('input',function(){q=qi.value.toLowerCase();apply();});}
+  rows.forEach(function(r){r.addEventListener('click',function(){var d=r.nextElementSibling;d.classList.toggle('open');d.style.display=d.classList.contains('open')?'table-row':'none';});});
+})();
+</script>
+</body>
+</html>

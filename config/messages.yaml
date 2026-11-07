@@ -1,0 +1,37 @@
+# rule id -> explain + fix (plain language, no LLM)
+VALUE_MISMATCH: {explain: "The factor in Guidewire differs from the approved value.", fix: "Correct the factor in the rate table to the approved value and re-export."}
+MATCH_ROUNDED: {explain: "Guidewire holds the approved value rounded to the column decimal scale.", fix: "No action needed unless the filing requires more decimal places."}
+PRECISION_TRUNCATION: {explain: "Rounding to the Guidewire column scale changes the approved value by more than the materiality threshold.", fix: "Increase the column scale in Guidewire or confirm the rounding with actuarial."}
+ORDER_OF_MAGNITUDE: {explain: "The Guidewire factor is many times larger or smaller than approved, which usually means a decimal point or unit error.", fix: "Check for a misplaced decimal point or percent/unit conversion and reload the value."}
+TRANSPOSITION: {explain: "The digits of the Guidewire factor are the approved digits in a different order.", fix: "Re-key the value from the approved workbook."}
+SIGN_FLIP: {explain: "The Guidewire factor has the opposite sign to the approved factor.", fix: "Correct the sign and re-export."}
+MISSING_ROW_IN_EXPORT: {explain: "An approved row is not present in the Guidewire table.", fix: "Add the missing row to the rate table."}
+EXTRA_ROW_IN_EXPORT: {explain: "Guidewire holds a row that is not in the approved table.", fix: "Remove the row, or ask product/actuarial whether the approved file is incomplete."}
+WILDCARD_MISMATCH: {explain: "A wildcard (applies-to-all) value in one source is a concrete value in the other.", fix: "Align the row with the approved wildcard or concrete value."}
+BLANK_FACTOR: {explain: "A factor cell is blank where a value is required. Blanks loaded instead of wildcards have caused production defects.", fix: "Enter the approved factor; do not leave factors blank."}
+TABLE_MISSING_IN_EXPORT: {explain: "An approved table was not found in the Guidewire export.", fix: "Load the table into the rate book or confirm the table mapping."}
+APPROVED_FILE_MISSING_TABLE: {explain: "The Jira story lists a table that is not in the approved workbook.", fix: "Obtain the approved table from actuarial/product."}
+UNDOCUMENTED_APPROVED_TABLE: {explain: "The approved workbook has a table that the Jira story does not mention.", fix: "Confirm the table is intended and update the story."}
+UNDECLARED_CHANGE: {explain: "A table changed versus the baseline but is not in the Jira story or approved workbook.", fix: "Revert the change or document it in the story."}
+MISSING_UPDATE: {explain: "The story declares an update but the table is unchanged versus the baseline.", fix: "Load the approved changes into the table."}
+BYPASS_VIOLATION: {explain: "A table marked bypass/do-not-load in Jira has changed.", fix: "Revert the table to the baseline edition."}
+REMOVE_NOT_APPLIED: {explain: "Jira says to remove the table but it still exists unchanged.", fix: "Remove the table from the rate book."}
+APPROVED_ROW_UNCHANGED: {explain: "An approved row equals the baseline value, i.e. approved says no change.", fix: "Check the approved file is the latest version."}
+RANGE_GAP: {explain: "There is a gap between two consecutive bands.", fix: "Correct the band boundaries so bands are contiguous."}
+RANGE_OVERLAP: {explain: "Two bands overlap.", fix: "Correct the band boundaries so bands do not overlap."}
+RANGE_MIN_GT_MAX: {explain: "A band minimum is greater than its maximum.", fix: "Correct the band boundaries."}
+OPEN_END_MISSING: {explain: "The last band has no maximum and is not open-ended by convention.", fix: "Confirm whether the top band should be open-ended."}
+OFF_BY_ONE_BOUNDARY: {explain: "A band boundary is shifted by exactly one versus the approved band.", fix: "Correct the boundary; this changes which risks get this factor."}
+EFFECTIVE_DATE_MISMATCH: {explain: "The export effective date differs from the filing effective date in Jira.", fix: "Correct the rate book effective date."}
+SCOPE_METADATA_MISMATCH: {explain: "The export jurisdiction or line of business differs from Jira.", fix: "Check that you exported the right rate book."}
+EDITION_NOT_INCREMENTED: {explain: "Edition did not change although the story declares changes.", fix: "Create a new edition for the change."}
+DUPLICATE_KEY: {explain: "Two rows share the same key.", fix: "Remove or correct the duplicate row."}
+FORMULA_NO_VALUE: {explain: "A formula cell has no cached value so the approved number cannot be known.", fix: "Open the workbook in Excel, recalculate, save, and re-run."}
+EXCEL_ERROR: {explain: "A cell holds an Excel error value.", fix: "Fix the source cell in the workbook."}
+APPROVED_TABLE_SUSPICIOUSLY_SMALL: {explain: "The approved table has far fewer rows than the Guidewire table; it may be a partial paste or a wrong mapping.", fix: "Confirm the approved tab holds the whole table."}
+STRIKETHROUGH_ROW: {explain: "A row or cell is struck through in the approved workbook.", fix: "Confirm whether the row should be deleted."}
+NEEDS_MAPPING: {explain: "The tool could not confidently match this table.", fix: "Run `rgl map` to confirm the mapping."}
+SUGGESTED_MAPPING: {explain: "The tool matched this table by similarity; it is not yet confirmed.", fix: "Confirm the mapping with `rgl review`."}
+JIRA_CONFLICT: {explain: "The Jira story gives conflicting actions for the same table.", fix: "Clarify the intended action in the story."}
+JIRA_UNPARSED: {explain: "A line mentions tables or dates but the tool could not interpret it.", fix: "Review the line manually or teach the pattern with `rgl review`."}
+NOT_EVALUATED_NO_BASELINE: {explain: "No baseline exists so changes to other tables were not checked.", fix: "Use --baseline, or accept this run as a snapshot so the next run has one."}

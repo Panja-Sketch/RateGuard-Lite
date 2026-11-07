@@ -1,0 +1,45 @@
+column_synonyms:
+  terr: territory
+  terr_code: territory
+  territory_code: territory
+  class: class_code
+  classcode: class_code
+  class_cd: class_code
+  stories: number_of_stories
+  no_of_stories: number_of_stories
+  num_stories: number_of_stories
+  sq_ft: square_feet
+  sqft: square_feet
+  const: construction
+  construction_type: construction
+  ded: deductible
+  cov: coverage
+  rate: factor
+  relativity: factor
+  value: factor
+abbreviations:
+  BLD: BUILDING
+  BPP: BUSINESS_PERSONAL_PROPERTY
+  TERR: TERRITORY
+  GL: GENERAL_LIABILITY
+  EPLI: EMPLOYMENT_PRACTICES_LIABILITY
+  DED: DEDUCTIBLE
+  COV: COVERAGE
+  CLS: CLASS
+  CONST: CONSTRUCTION
+  EXT: ""
+  BASERATE: BASE_RATE
+lob_synonyms:
+  BOP: [BOP, BP7, BUSINESSOWNERS, BUSINESSOWNER, BUSINESS OWNERS, BUSINESS OWNERS POLICY]
+  CA: [COMMERCIAL AUTO, BUSINESS AUTO]
+  GL: [GENERAL LIABILITY, CGL]
+  FO: [FARM, FARMOWNERS]
+  WC: [WORKERS COMP, WORKERS COMPENSATION]
+  CP: [COMMERCIAL PROPERTY]
+range_suffix_pairs:
+  - [_min, _max]
+  - [_from, _to]
+  - [_low, _high]
+  - [lower, upper]
+  - [minimum, maximum]
+description_columns: [description, notes, note, comment, comments, remarks, desc]

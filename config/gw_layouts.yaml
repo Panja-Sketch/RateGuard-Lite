@@ -1,0 +1,17 @@
+# Guidewire export layout profiles. Calibrate with `rgl inspect FILE`.
+profiles:
+  - name: standard
+    metadata_labels:
+      rate_book_code: ["rate book code", "ratebookcode", "rate book", "ratebook"]
+      edition: ["edition", "rate book edition"]
+      table_code: ["table code", "tablecode", "rate table code"]
+      table_name: ["table name", "rate table name", "name"]
+      effective_date: ["effective date", "effectivedate", "rate book effective date"]
+      expiration_date: ["expiration date", "expirationdate"]
+      status: ["status", "rate book status"]
+      jurisdiction: ["jurisdiction", "state"]
+      lob: ["line of business", "lob", "policy line"]
+    type_tokens: [DECIMAL, INTEGER, STRING, DATE, BOOLEAN, DOUBLE, LONG, NUMBER, TEXT, BIGDECIMAL, INT, BOOL, DATETIME]
+    factor_markers: [factor, rate, value, premium, relativity, amount]
+    # where the header row sits relative to the type row
+    header_position: below_type    # below_type | above_type

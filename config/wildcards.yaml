@@ -1,0 +1,7 @@
+global_tokens: ["", "*", "ALL", "ANY", "DEFAULT", "<ALL>"]
+# Per-table / per-column additions, e.g. -1 as a wildcard only for BOP:42 class_code
+per_column: {}
+  # "BOP:42":
+  #   class_code: ["-1"]
+boolean_true: ["Y", "YES", "TRUE", "1", "T"]
+boolean_false: ["N", "NO", "FALSE", "0", "F"]

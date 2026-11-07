@@ -1,0 +1,11 @@
+midterm_ratebook_rule: "rate book of the term inception"
+out_of_bounds_expectation: "highest band factor or validation error"
+templates:
+  TX-01: true
+  TX-02: true
+  TX-03: true
+  TX-04: true
+  TX-05: true
+  TX-06: true
+  TX-07: true
+  TX-08: true

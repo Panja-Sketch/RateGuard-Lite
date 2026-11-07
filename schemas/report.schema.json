@@ -1,0 +1,275 @@
+{
+  "$defs": {
+    "Finding": {
+      "additionalProperties": false,
+      "properties": {
+        "rule_id": {
+          "title": "Rule Id",
+          "type": "string"
+        },
+        "severity": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Severity"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "status": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Status"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "table_id": {
+          "default": "",
+          "title": "Table Id",
+          "type": "string"
+        },
+        "table_name": {
+          "default": "",
+          "title": "Table Name",
+          "type": "string"
+        },
+        "key": {
+          "default": "",
+          "title": "Key",
+          "type": "string"
+        },
+        "column": {
+          "default": "",
+          "title": "Column",
+          "type": "string"
+        },
+        "approved_value": {
+          "default": "",
+          "title": "Approved Value",
+          "type": "string"
+        },
+        "export_value": {
+          "default": "",
+          "title": "Export Value",
+          "type": "string"
+        },
+        "approved_ref": {
+          "default": "",
+          "title": "Approved Ref",
+          "type": "string"
+        },
+        "export_ref": {
+          "default": "",
+          "title": "Export Ref",
+          "type": "string"
+        },
+        "message": {
+          "default": "",
+          "title": "Message",
+          "type": "string"
+        },
+        "explanation": {
+          "default": "",
+          "title": "Explanation",
+          "type": "string"
+        },
+        "suggested_fix": {
+          "default": "",
+          "title": "Suggested Fix",
+          "type": "string"
+        },
+        "details": {
+          "additionalProperties": true,
+          "title": "Details",
+          "type": "object"
+        }
+      },
+      "required": [
+        "rule_id"
+      ],
+      "title": "Finding",
+      "type": "object"
+    },
+    "InputRef": {
+      "additionalProperties": false,
+      "properties": {
+        "role": {
+          "title": "Role",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "sha256": {
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "role",
+        "name",
+        "sha256"
+      ],
+      "title": "InputRef",
+      "type": "object"
+    },
+    "Severity": {
+      "enum": [
+        "BLOCKER",
+        "CRITICAL",
+        "HIGH",
+        "WARNING",
+        "INFO"
+      ],
+      "title": "Severity",
+      "type": "string"
+    },
+    "Status": {
+      "enum": [
+        "NEEDS_MAPPING",
+        "NEEDS_REVIEW",
+        "NOT_EVALUATED"
+      ],
+      "title": "Status",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "tool": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Tool",
+      "type": "object"
+    },
+    "run": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Run",
+      "type": "object"
+    },
+    "inputs": {
+      "items": {
+        "$ref": "#/$defs/InputRef"
+      },
+      "title": "Inputs",
+      "type": "array"
+    },
+    "verdict": {
+      "title": "Verdict",
+      "type": "string"
+    },
+    "gate": {
+      "title": "Gate",
+      "type": "string"
+    },
+    "exit_code": {
+      "title": "Exit Code",
+      "type": "integer"
+    },
+    "summary": {
+      "additionalProperties": true,
+      "title": "Summary",
+      "type": "object"
+    },
+    "jira": {
+      "additionalProperties": true,
+      "title": "Jira",
+      "type": "object"
+    },
+    "baseline": {
+      "additionalProperties": true,
+      "title": "Baseline",
+      "type": "object"
+    },
+    "findings": {
+      "items": {
+        "$ref": "#/$defs/Finding"
+      },
+      "title": "Findings",
+      "type": "array"
+    },
+    "scope_matrix": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Scope Matrix",
+      "type": "array"
+    },
+    "mapping": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Mapping",
+      "type": "array"
+    },
+    "warnings": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Warnings",
+      "type": "array"
+    },
+    "info": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Info",
+      "type": "array"
+    },
+    "learned_used": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Learned Used",
+      "type": "array"
+    },
+    "tolerance_overrides": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Tolerance Overrides",
+      "type": "array"
+    },
+    "test_scenarios": {
+      "additionalProperties": {
+        "type": "integer"
+      },
+      "title": "Test Scenarios",
+      "type": "object"
+    }
+  },
+  "required": [
+    "tool",
+    "run",
+    "inputs",
+    "verdict",
+    "gate",
+    "exit_code",
+    "summary",
+    "jira",
+    "baseline",
+    "findings",
+    "scope_matrix",
+    "mapping"
+  ],
+  "title": "Report",
+  "type": "object"
+}

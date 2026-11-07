@@ -1,0 +1,8 @@
+# canonical column -> PolicyCenter UI field label
+fields:
+  number_of_stories: "Number of Stories (Building screen)"
+  territory: "Territory (Location screen)"
+  class_code: "Class Code (Building/Classification screen)"
+  construction: "Construction Type (Building screen)"
+  deductible: "Deductible (Coverages screen)"
+  square_feet: "Total Area, sq ft (Building screen)"
