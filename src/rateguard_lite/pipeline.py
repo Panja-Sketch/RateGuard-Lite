@@ -17,6 +17,7 @@ from .config import Config, config_hash, load_config
 from .engines.baseline import Delta, run_baseline
 from .engines.checks import completeness_findings, integrity_findings
 from .engines.common import make_finding, table_hash
+from .engines.diagnose import Problem, build_problems, headline_counts
 from .engines.factors import FactorResult, compare_pair, emit_row_findings
 from .engines.metadata import audit_metadata, out_of_scope_dated
 from .engines.ranges import boundary_shifts, check_ranges
@@ -41,6 +42,7 @@ SCOPE_RULES = {"BYPASS_VIOLATION", "UNDECLARED_CHANGE", "MISSING_UPDATE", "REMOV
 DECLARED = {"ADD", "MODIFY", "REPLACE"}
 SCOPE_CHECK_SKIPPED = NO_BASELINE_LINE                 # D-027 wording
 SCOPE_CHECK_DONE = BASELINE_DONE_LINE
+BYPASS_NOTE = "We can't tell whether tables marked DO NOT LOAD were changed without a 'before' export. Check them manually or supply --baseline."
 
 
 @dataclass
@@ -95,6 +97,7 @@ class RunResult:
     check_notes: dict[str, Any] = field(default_factory=dict)
     jira_text: str = ""
     tests_mode: str = "must"
+    problems: list[Problem] = field(default_factory=list)
 
     def to_report(self) -> Report:
         return Report(
@@ -115,6 +118,7 @@ class RunResult:
             test_scenarios={"parameter_tests": len(getattr(self.tests, "parameter", [])), "transaction_tests": len(getattr(self.tests, "transaction", [])),
                             "must_test_count": len(getattr(self.tests, "must", [])), "all_candidates_count": len(getattr(self.tests, "candidates", [])),
                             "must_tests": list(getattr(self.tests, "must", []))},
+            problems=[p.to_dict() for p in self.problems],
         )
 
 
@@ -259,7 +263,7 @@ def run_reconciliation(opts: RunOptions, progress: Callable[[str], None] | None 
                 in_scope_export.add(p.id)
         for p in pairs:
             if p.approved is not None:
-                findings += integrity_findings(p.approved, p.id, p.display, "approved", cfg)
+                findings += integrity_findings(p.approved, p.id, p.display, "approved", cfg, p.export)
                 findings += check_ranges(p.approved, p.id, p.display, "approved", learned)
             if p.export is not None and p.id in in_scope_export:
                 findings += integrity_findings(p.export, p.id, p.display, "export", cfg)
@@ -275,12 +279,24 @@ def run_reconciliation(opts: RunOptions, progress: Callable[[str], None] | None 
         has_changes = any(p.approved is not None for p in pairs) or any(p.jira_action in DECLARED for p in pairs)
         findings += audit_metadata(export_ing.book, approved_ing.book, baseline_book.metadata if baseline_book else None, jira, pairs, cfg, has_changes)
         for w in approved_ing.warnings + export_ing.warnings:
+            if "hidden sheet not used" in w or "is hidden; not used" in w:
+                continue                  # D-031: already reported once, in plain words, as HIDDEN_SHEET
             findings.append(make_finding("INPUT_WARNING", severity=Severity.WARNING, message=w))
         for i in approved_ing.info + export_ing.info:
             findings.append(make_finding("VBA_PRESENT" if "VBA" in i else "INPUT_INFO", severity=Severity.INFO, message=i,))
-        oos, oos_notes = out_of_scope_dated(pairs, export_ing.book, jira)
+        if cfg.scope.oos_enabled:
+            oos, oos_notes = out_of_scope_dated(pairs, export_ing.book, jira, deltas if baseline_book is not None else None, cfg.scope.oos_max_stamp_share)
+        else:
+            oos, oos_notes = [], ["Check disabled by configuration (scope.oos_enabled: false, D-032)."]
         findings += oos
         check_notes = {"out_of_scope_table_dated": oos_notes}
+        bypass_names = [p.display for p in pairs if p.jira_action == "BYPASS"]
+        bypass_note = ""
+        if baseline_book is None and bypass_names:
+            bypass_note = BYPASS_NOTE
+            findings.append(make_finding("BYPASS_NOT_CHECKED", severity=Severity.INFO, message=f"{len(bypass_names)} table(s) marked DO NOT LOAD: {', '.join(bypass_names[:5])}",
+                                         plain_what=BYPASS_NOTE, plain_why="A table that should not change may have been changed without anyone noticing.",
+                                         plain_action="Open those tables in PolicyCenter and compare them with production, or run again with --baseline."))
         s = stage("scope_metadata", s)
 
         # learning hints (informational only; findings still count)
@@ -308,7 +324,7 @@ def run_reconciliation(opts: RunOptions, progress: Callable[[str], None] | None 
             "rate_book": exp_meta.get("rate_book_code"), "export_edition": exp_meta.get("edition"), "export_effective_date": exp_meta.get("effective_date"),
             "baseline": baseline_info["label"],
             "scope_check": SCOPE_CHECK_DONE.format(b=baseline_info["label"]) if baseline_book is not None else SCOPE_CHECK_SKIPPED,
-            "scope_check_performed": baseline_book is not None,
+            "scope_check_performed": baseline_book is not None, "bypass_note": bypass_note,
             "tables_in_export": len(export_ing.book.tables), "tables_in_approved": len(approved_ing.book.tables),
             "tables_analyzed": len(analyzed), "tables_matched": len(matched), "tables_with_discrepancies": len(by_table_bad),
             "scope_violations": len(scope_bad),
@@ -316,6 +332,8 @@ def run_reconciliation(opts: RunOptions, progress: Callable[[str], None] | None 
             "critical": lvl["CRITICAL"], "high": lvl["HIGH"], "blockers": lvl["BLOCKER"], "warnings": lvl["WARNING"], "info": lvl["INFO"],
             "needs_mapping": lvl["NEEDS_MAPPING"], "needs_review": lvl["NEEDS_REVIEW"], "not_evaluated": lvl["NOT_EVALUATED"],
         }
+        problems = build_problems(findings, pairs, fres)
+        summary.update(headline_counts(problems))
         inputs = [InputRef(role="approved", name=f["name"], sha256=f["sha256"]) for f in approved_ing.input_files]
         inputs += [InputRef(role="export", name=f["name"], sha256=f["sha256"]) for f in export_ing.input_files]
         inputs += extra_inputs
@@ -336,10 +354,10 @@ def run_reconciliation(opts: RunOptions, progress: Callable[[str], None] | None 
         result = RunResult(
             run_id=run_id, started_at=started, verdict=verdict, exit_code=exit_code, findings=findings, summary=summary, jira=jira,
             mapping=mapping, scope=sc, deltas=deltas, factor_results=fres, inputs=inputs, baseline_info=baseline_info,
-            warnings=approved_ing.warnings + export_ing.warnings, info=approved_ing.info + export_ing.info, proposals=proposals,
+            warnings=[w for w in approved_ing.warnings + export_ing.warnings if "hidden sheet not used" not in w and "is hidden; not used" not in w], info=approved_ing.info + export_ing.info, proposals=proposals,
             learned_used=learned.used, tolerance_notes=sorted(set(tol_notes)), timings=timings, cfg=cfg, cfg_hash=chash,
             approved_ing=approved_ing, export_ing=export_ing, out=opts.out, user=user, learned_version=learned.version, lob=lob,
-            check_notes=check_notes, tests_mode=opts.tests, jira_text=_read_text_safe(opts.jira),
+            check_notes=check_notes, tests_mode=opts.tests, jira_text=_read_text_safe(opts.jira), problems=problems,
         )
         # ---- scenarios
         from .tests_gen.generate import generate_tests

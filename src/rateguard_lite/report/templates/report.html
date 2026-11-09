@@ -59,6 +59,7 @@ th{background:var(--bg);text-align:left;padding:8px 10px;font-size:11px;text-tra
 td{padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
 tr.f{cursor:pointer} tr.f:hover td{background:var(--bg)}
 details.tech{margin-top:6px} details.tech summary{cursor:pointer;color:var(--muted);font-size:12px} details.tech .mono{margin-top:4px;word-break:break-word}
+.prob{margin:10px 0;padding:12px 16px} .prob summary{cursor:pointer;list-style:none} .prob .cause{margin-top:4px;color:var(--muted)} .prob ul.rows{margin:6px 0 0;padding-left:20px;font-size:13px}
 .howto ul{margin:6px 0 0;padding-left:20px} .howto li{margin:2px 0}
 tr.d td{background:var(--bg);color:var(--muted);font-size:12.5px} tr.d{display:none} tr.d.open{display:table-row}
 .mono{font-family:ui-monospace,Consolas,Menlo,monospace;font-size:12px}
@@ -81,6 +82,7 @@ footer{margin-top:30px;color:var(--muted);font-size:12px;text-align:center}
       <span class="chip v">{{ verdict.replace('_',' ') }}</span>
       <h1>{{ s.ticket or 'Rate book verification' }}</h1>
       <div class="gate">{{ gate }}</div>
+      {% if s.headline %}<div class="gate"><b>{{ s.headline }}</b></div>{% endif %}
     </div>
     <div class="meta">
       <div><b>Line / State</b>{{ s.lob or '-' }} / {{ s.states|join(', ') or '-' }}</div>
@@ -88,7 +90,7 @@ footer{margin-top:30px;color:var(--muted);font-size:12px;text-align:center}
       <div><b>Rate book</b>{{ s.rate_book or '-' }}</div>
       <div><b>Export edition</b>{{ s.export_edition or '-' }}</div>
       <div><b>Baseline</b>{{ s.baseline }}</div>
-      <div><b>Scope check</b>{{ s.scope_check }}</div>
+      <div><b>Scope check</b>{{ s.scope_check }}{% if s.bypass_note %}<br>{{ s.bypass_note }}{% endif %}</div>
     </div>
   </section>
 
@@ -110,14 +112,31 @@ footer{margin-top:30px;color:var(--muted);font-size:12px;text-align:center}
   {% endif %}
 
   <nav class="tabs" role="tablist">
-    <button class="on" data-pane="p-find">Findings ({{ findings|length }})</button>
+    <button class="on" data-pane="p-prob">Problems by table ({{ problems|length }})</button>
+    <button data-pane="p-find">All findings ({{ findings|length }})</button>
     <button data-pane="p-scope">Scope audit ({{ scope|length }})</button>
     <button data-pane="p-map">Mapping ({{ mapping|length }})</button>
     <button data-pane="p-tests">Must Test ({{ must|length }})</button>
     <button data-pane="p-in">Inputs &amp; notes</button>
   </nav>
 
-  <div id="p-find" class="pane on">
+  <div id="p-prob" class="pane on">
+    {% for p in problems %}
+    <details class="card prob">
+      <summary><span class="chip l-{{ p.level }}">{{ labels[p.level] }}</span> <b>{{ p.table_name or 'Whole rate book' }}</b>
+        <span class="muted">{{ p.count }} item{{ 's' if p.count != 1 else '' }}</span><div>{{ p.headline }}</div>
+        {% if p.likely_cause %}<div class="cause"><b>Likely cause:</b> {{ p.likely_cause }}</div>{% endif %}</summary>
+      {% if p.findings[0].plain_why %}<div><b>Why it matters:</b> {{ p.findings[0].plain_why }}</div>{% endif %}
+      {% if p.findings[0].plain_action %}<div><b>What to do:</b> {{ p.findings[0].plain_action }}</div>{% endif %}
+      {% if p.count > 1 %}<ul class="rows">{% for f in p.findings[:50] %}<li>{{ f.plain_what or f.message }}</li>{% endfor %}</ul>
+      {% if p.count > 50 %}<div class="muted">{{ p.count - 50 }} more rows are in the All findings tab.</div>{% endif %}{% endif %}
+      <details class="tech"><summary>Technical details</summary><div class="mono">{% for f in p.findings[:50] %}{{ tech(f) }}<br>{% endfor %}</div></details>
+    </details>
+    {% endfor %}
+    {% if not problems %}<div class="empty">No problems to fix.</div>{% endif %}
+  </div>
+
+  <div id="p-find" class="pane">
     <div class="filters" id="lvlfilters">
       <button class="on" data-lvl="ALL">All</button>
       {% for l in level_order %}{% if levels[l] %}<button data-lvl="{{ l }}">{{ labels[l] }} · {{ levels[l] }}</button>{% endif %}{% endfor %}

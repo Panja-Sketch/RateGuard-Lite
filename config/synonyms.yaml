@@ -43,3 +43,6 @@ range_suffix_pairs:
   - [lower, upper]
   - [minimum, maximum]
 description_columns: [description, notes, note, comment, comments, remarks, desc]
+# Optional (D-030): labels that mean the same thing. Only used to explain a mismatch ("same rows written differently"); never changes a comparison.
+# Example:  code_labels: {COMMERCIAL: [CMP_MONO]}
+code_labels: {}

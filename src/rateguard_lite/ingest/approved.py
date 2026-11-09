@@ -12,9 +12,9 @@ from ..config import Config
 from ..errors import UnsafeInputError
 from ..guard.safety import safety_gate_workbook, safety_gate_zip
 from ..learning.context import LearnedContext
-from ..mapping.identity import canonical_id
+from ..mapping.identity import canonical_id, clean_name, extract_number
 from ..model.core import RateBook, RateTable
-from .layout import ApprovedLayout, detect_approved_layout, extract_metadata, failure_reason
+from .layout import ApprovedLayout, detect_approved_layout, extract_metadata, failure_reason, is_header_only
 from .result import IngestResult, SheetIssue
 from .tablebuild import build_table
 from .workbook import WorkbookReader
@@ -81,6 +81,9 @@ def ingest_approved(path: Path, cfg: Config, lob: str, learned: LearnedContext |
                         continue
                     g = rd.grid(s.name)
                     layout = detect_approved_layout(g, cfg.limits.max_header_scan_rows)
+                    if not isinstance(layout, ApprovedLayout) and is_header_only(g):
+                        raise UnsafeInputError(f"The tab '{s.name}' in {display} has headers but no rows.", where=f"{display}, tab {s.name}",
+                                               next_step="Add the approved rows to the tab, or delete the tab if it is not part of this change, then run again.")
                     if not isinstance(layout, ApprovedLayout):
                         res.issues.append(SheetIssue(display, s.name, "NEEDS_MAPPING", failure_reason(g, layout.reason)))
                         unmapped.append(f"{display}!{s.name}")
@@ -92,11 +95,13 @@ def ingest_approved(path: Path, cfg: Config, lob: str, learned: LearnedContext |
                     name = s.name
                     if _GENERIC.match(name) and len(data_sheets) == 1:
                         name = Path(display).stem
-                    nid = canonical_id(lob, name)
+                    nid = canonical_id(lob, clean_name(name), anywhere=True)
                     if nid in tables:
-                        res.issues.append(SheetIssue(display, s.name, "NEEDS_MAPPING", f"Table identity {nid} is used by more than one approved sheet."))
-                        unmapped.append(f"{display}!{s.name}")
-                        continue
+                        if extract_number(clean_name(name), strict=True, anywhere=True):
+                            res.issues.append(SheetIssue(display, s.name, "NEEDS_MAPPING", f"Table identity {nid} is used by more than one approved sheet."))
+                            unmapped.append(f"{display}!{s.name}")
+                            continue
+                        nid = f"{nid}~{len(tables)}"       # D-029: same name, no number - keep both, never drop one
                     t = build_table(
                         grid=g, file_name=display, sha256=rd.sha256, origin="APPROVED", native_id=nid,
                         display_name=name, header_row=layout.header_row, data_start=layout.data_start,

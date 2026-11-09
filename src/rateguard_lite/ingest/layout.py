@@ -230,3 +230,9 @@ def failure_reason(grid: Any, reason: str) -> str:
     if not any(not _empty(v) for row in grid.rows for v in row):
         return "The tab is empty."
     return reason
+
+
+def is_header_only(grid: Any) -> bool:
+    """True when a tab holds a header row and no data rows at all (D-031)."""
+    rows = [row for row in grid.rows if _nonempty_idx(row)]
+    return bool(rows) and _looks_header(rows[-1]) and not any(_is_numeric_like(v) for row in rows for v in row)

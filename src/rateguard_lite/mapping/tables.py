@@ -11,7 +11,7 @@ from ..config import Config
 from ..ingest.jira import JiraScope, JiraTableRef, TableAction
 from ..learning.context import LearnedContext
 from ..model.core import ColumnRole, RateBook, RateTable
-from .identity import expand_tokens, extract_number, name_key
+from .identity import clean_name, expand_tokens, extract_number, name_key
 
 Confidence = Literal["CONFIRMED", "SUGGESTED", "UNMAPPED", "NONE"]
 PLAUSIBLE = 0.20      # below this an unmatched approved table is reported as missing, not "needs mapping" (D-007)
@@ -50,7 +50,8 @@ class MappingResult:
 # ------------------------------------------------------------------ names & scoring
 def _names(t: RateTable) -> list[str]:
     if t.origin == "APPROVED":
-        return [t.display_name]
+        c = clean_name(t.display_name)
+        return [c] if c == t.display_name else [c, t.display_name]
     md = t.metadata
     out = [md.get("table_name", ""), md.get("table_code", "")]
     if not any(out):
@@ -68,6 +69,11 @@ def _number(t: RateTable) -> str | None:
     for strict in (True, False):
         for n in _names(t):
             v = extract_number(n, strict=strict)
+            if v:
+                return v
+    if t.origin == "APPROVED":                      # D-029: messy tab names carry the number anywhere
+        for n in _names(t):
+            v = extract_number(n, strict=True, anywhere=True)
             if v:
                 return v
     return None
@@ -200,7 +206,7 @@ def resolve_jira(res: MappingResult, jira: JiraScope, lob: str, cfg: Config) -> 
     pairs = res.pairs
     resolved: list[JiraTableRef] = []
     for ref in jira.tables:
-        cand: list[tuple[float, TablePair, bool]] = []
+        cand: list[tuple[float, TablePair, bool, bool]] = []
         rtok = _tokens(ref.table_name or "", lob)
         for p in pairs:
             nums = _pair_numbers(p)
@@ -218,7 +224,9 @@ def resolve_jira(res: MappingResult, jira: JiraScope, lob: str, cfg: Config) -> 
             if ident and not num_hit:
                 score = 0.6 + 0.4 * sim
             if score > 0:
-                cand.append((score, p, num_hit or ident))
+                cand.append((score, p, num_hit or ident, num_hit))
+        if ref.table_number and any(c[3] for c in cand):
+            cand = [c for c in cand if c[3]]              # D-029: the table number decides; a same-named table cannot tie with it
         cand.sort(key=lambda x: (-x[0], x[1].id))
         cid, conf = None, "UNRESOLVED"
         if cand:

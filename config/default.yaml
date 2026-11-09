@@ -30,6 +30,9 @@ jira:
   llm:
     enabled: false
     endpoint: "http://127.0.0.1:11434"
+scope:
+  oos_enabled: false          # D-032: OUT_OF_SCOPE_TABLE_DATED is off by default (set true, or use profile oos_stamp_wide, to run it)
+  oos_max_stamp_share: 0.30   # D-031: OUT_OF_SCOPE_TABLE_DATED is skipped when its stamp is shared by more than this share of tables
 tests:
   max_per_table: 25
   max_must_tests: 8       # D-026/D-028: most tests in the short 'Must Test' list (3-20)

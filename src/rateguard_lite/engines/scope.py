@@ -7,6 +7,7 @@ from typing import Any
 
 from ..ingest.jira import JiraScope
 from ..ingest.result import IngestResult
+from ..mapping.identity import extract_number
 from ..mapping.tables import MappingResult, TablePair
 from ..model.findings import Finding, Severity, Status
 from .common import make_finding
@@ -30,6 +31,23 @@ def _plain_reason(reason: str) -> str:
 
 def scope_findings(mapping: MappingResult, jira: JiraScope, approved_ing: IngestResult, export_ing: IngestResult) -> list[Finding]:
     out: list[Finding] = []
+    # D-029: an approved tab that could not be matched/read is reported once (as needing help); the scope statements that
+    # only follow from it ("not in the story", "story's table not in the workbook") are left out.
+    unmatched_numbers: set[str] = set()
+    unmatched_export_ids: set[str] = set()
+    for p in mapping.pairs:
+        if p.approved is not None and p.export is None and p.confidence == "UNMAPPED":
+            for t in (p.approved,):
+                n = extract_number(t.display_name, strict=True, anywhere=True)
+                if n:
+                    unmatched_numbers.add(n)
+            unmatched_export_ids.update(cid for cid, _ in p.candidates[:1])
+    for ing in (approved_ing,):
+        for iss in ing.issues:
+            if iss.status == "NEEDS_MAPPING":
+                n = extract_number(iss.sheet, strict=True, anywhere=True)
+                if n:
+                    unmatched_numbers.add(n)
     for p in mapping.pairs:
         ctx: dict[str, Any] = dict(table_id=p.id, table_name=p.display)
         if p.approved is not None and p.export is None:
@@ -45,10 +63,13 @@ def scope_findings(mapping: MappingResult, jira: JiraScope, approved_ing: Ingest
                                     message=f"'{p.approved.display_name}' was matched to export table '{p.export.display_name}' by similarity "
                                             f"({p.score:.2f}); confirm the mapping.", **ctx))
         act = p.jira_action
-        if p.approved is not None and not p.jira and p.jira_action is None:
+        unmatched_here = p.approved is not None and p.export is None and p.confidence in ("UNMAPPED", "NONE")
+        if p.approved is not None and not p.jira and p.jira_action is None and not unmatched_here:
             out.append(make_finding("UNDOCUMENTED_APPROVED_TABLE", severity=Severity.WARNING,
                                     message=f"Approved table '{p.approved.display_name}' is not mentioned in the Jira story.", **ctx))
-        if p.approved is None and p.jira and act in ("ADD", "MODIFY", "REPLACE"):
+        covered = bool(p.export is not None and p.export.canonical_id in unmatched_export_ids) or any(
+            (r.table_number or "") in unmatched_numbers for r in p.jira if r.table_number)
+        if p.approved is None and p.jira and act in ("ADD", "MODIFY", "REPLACE") and not covered:
             out.append(make_finding("APPROVED_FILE_MISSING_TABLE", severity=Severity.HIGH,
                                     message=f"Jira declares '{act}' for this table but it is not in the approved workbook.", **ctx))
         if p.jira and p.jira_confidence == "SUGGESTED":
@@ -60,7 +81,7 @@ def scope_findings(mapping: MappingResult, jira: JiraScope, approved_ing: Ingest
                                     message=f"The Jira story gives conflicting actions for this table (lines {lines}).", **ctx))
     # Jira references that matched no table anywhere
     for r in mapping.resolved_jira:
-        if r.canonical_id is None and r.action.value in ("ADD", "MODIFY", "REPLACE"):
+        if r.canonical_id is None and r.action.value in ("ADD", "MODIFY", "REPLACE") and (r.table_number or "") not in unmatched_numbers:
             out.append(make_finding("APPROVED_FILE_MISSING_TABLE", severity=Severity.HIGH, table_id=r.table_number or (r.table_name or "?"),
                                     table_name=r.table_name or "",
                                     message=f"Jira line {r.line_no} declares '{r.action.value}' for a table found in neither the approved workbook nor the export: {r.raw_text[:80]}"))

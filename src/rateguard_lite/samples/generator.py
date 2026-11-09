@@ -563,6 +563,7 @@ def _m_no_baseline_strict(c: Ctx) -> None:
 
 def _m_out_of_scope_dated(c: Ctx) -> None:
     # Some tables outside the approved file and Jira keep their old stamps; the rest carry this filing's date and edition.
+    c.use_baseline_flag, c.profile = False, "oos_stamp_wide"     # D-031: with a baseline only changed tables count; wide stamps are skipped by default
     fillers = [t for t in c.export if t.code not in APPROVED_CODES]
     for t in fillers[: max(1, len(fillers) * 2 // 5)]:
         c.meta_override[t.code] = {"Edition": OLD_EDITION, "Effective Date": OLD_EFF.strftime("%m/%d/%Y")}

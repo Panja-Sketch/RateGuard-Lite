@@ -93,3 +93,8 @@ A `FALSE_POSITIVE` disposition only adds a hint next to an identical future find
 | "No data-type row found" | Calibrate `gw_layouts.yaml` (see above). |
 | Many `NEEDS_MAPPING` on day one | Run `rgl map --run <out>` once per table; later runs are automatic. |
 | Slow on huge books | Check `run.log` stage timings; typical 220-table export: ~10 s. |
+
+## Optional settings added by D-029..D-031
+- `scope.oos_enabled` (default `false`, D-032): switches the date/edition check for tables outside the change on. Use profile `oos_stamp_wide` (`--profile oos_stamp_wide`) to turn it on with no share limit.
+- `scope.oos_max_stamp_share` (default 0.30 in `config/default.yaml`): the date/edition check for tables outside the change is skipped when more than this share of tables carries the filing's stamp. Profile `oos_stamp_wide` sets it to 1.0.
+- `code_labels` (optional, `config/synonyms.yaml`): groups of labels that mean the same thing, for example `COMMERCIAL: [CMP_MONO]`. Used only to explain a mismatch ("same rows written differently"); it never changes a comparison.

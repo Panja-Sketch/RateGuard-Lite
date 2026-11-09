@@ -1,0 +1,40 @@
+RATEGUARD-LITE VERDICT: FAIL — Some values in PolicyCenter don't match what was approved. Fix these before QA.
+1 table has problems (1 cell).
+Ticket: PC-12345 | LOB: BOP | State: OR | Filing effective: 2027-03-15
+Rate book: BOPByPeril_OR_RateBook | Export edition: 2025-V2 | Baseline: provided (baseline.xlsx, edition 2025-V1)
+Tables: 8 analyzed | 7 matched | 1 with discrepancies | 0 scope violation(s)
+Cells: 89 compared | 1 critical | 0 high | 0 warnings | 0 rounded matches
+We also checked tables outside this change against the 'before' export: provided (baseline.xlsx, edition 2025-V1).
+WHAT NEEDS FIXING
+ [Critical] Table '121 BLD Number of Stories' (4 to 6 stories): the Stories Factor value in PolicyCenter is not the approved value. Approved 1.045, PolicyCenter has 1.025 (1.9% lower).
+     Why it matters: Policies with 4 to 6 stories will be undercharged.
+     What to do: Change the value in PolicyCenter to 1.045 and export the rate book again.
+NEXT STEPS
+ 1. Change the value in PolicyCenter to 1.045 and export the rate book again. (121 BLD Number of Stories)
+
+MUST TEST (top 8)
+ 1. After the fix, quote the exact row that was wrong in 121 BLD Number of Stories.
+     Set up: Stories = 4
+     You should see: In the rating worksheet, the Stories Factor for 121 BLD Number of Stories should be 1.045.
+ 2. Quote on the filing date using the changed 121 BLD Number of Stories table.
+     Set up: New business, effective 3/15/2027; Stories = 1.
+     You should see: The rating worksheet should use the new rates (rate book 2025-V2). Also, the Stories Factor for 121 BLD Number of Stories should be 1.01. It changed by 1.0% in this filing.
+ 3. Quote a new business policy effective the day before the filing date.
+     Set up: New business, effective 3/14/2027.
+     You should see: The rating worksheet should use the old rates (rate book 2025-V1).
+ 4. Renew a policy with an effective date on or after the filing date.
+     Set up: Renewal, effective 5/15/2027.
+     You should see: The rating worksheet should use the new rates (rate book 2025-V2).
+ 5. Quote a policy that uses the new row in 10 Vandalism Exclusion.
+     Set up: Vandalism Excluded = FALSE
+     You should see: In the rating worksheet, the Credit Factor for 10 Vandalism Exclusion should be 1.
+ 6. Quote a policy that uses the new row in 42 GL Class Code Factor.
+     Set up: Class Code (Building/Classification screen) = 0099
+     You should see: In the rating worksheet, the Class Factor for 42 GL Class Code Factor should be 1.11.
+ 7. Make a mid-term policy change on a policy whose term started before the filing date.
+     Set up: A policy that started before 3/15/2027; add a premium-bearing change effective on or after 3/15/2027.
+     You should see: The rating worksheet should keep the original rates (rate book of the term inception), not the new ones.
+ 8. Quote exactly on the lower edge of a 121 BLD Number of Stories band, where the factor changes.
+     Set up: Stories = 2
+     You should see: In the rating worksheet, the Stories Factor for 121 BLD Number of Stories should be 1.0225. It changed by 1.0% in this filing. One step lower (Stories = 1) should show the previous band: 1.01.
+Full candidate list: test_scenarios.xlsx > All Candidates

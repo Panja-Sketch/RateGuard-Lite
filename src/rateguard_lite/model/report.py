@@ -36,3 +36,4 @@ class Report(BaseModel):
     learned_used: list[dict[str, Any]] = Field(default_factory=list)
     tolerance_overrides: list[str] = Field(default_factory=list)
     test_scenarios: dict[str, Any] = Field(default_factory=dict)
+    problems: list[dict[str, Any]] = Field(default_factory=list)      # D-030: findings grouped per table (additive)

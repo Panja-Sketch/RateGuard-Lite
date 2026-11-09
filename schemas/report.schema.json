@@ -3,6 +3,66 @@
     "Finding": {
       "additionalProperties": false,
       "properties": {
+        "approved_ref": {
+          "default": "",
+          "title": "Approved Ref",
+          "type": "string"
+        },
+        "approved_value": {
+          "default": "",
+          "title": "Approved Value",
+          "type": "string"
+        },
+        "column": {
+          "default": "",
+          "title": "Column",
+          "type": "string"
+        },
+        "details": {
+          "additionalProperties": true,
+          "title": "Details",
+          "type": "object"
+        },
+        "explanation": {
+          "default": "",
+          "title": "Explanation",
+          "type": "string"
+        },
+        "export_ref": {
+          "default": "",
+          "title": "Export Ref",
+          "type": "string"
+        },
+        "export_value": {
+          "default": "",
+          "title": "Export Value",
+          "type": "string"
+        },
+        "key": {
+          "default": "",
+          "title": "Key",
+          "type": "string"
+        },
+        "message": {
+          "default": "",
+          "title": "Message",
+          "type": "string"
+        },
+        "plain_action": {
+          "default": "",
+          "title": "Plain Action",
+          "type": "string"
+        },
+        "plain_what": {
+          "default": "",
+          "title": "Plain What",
+          "type": "string"
+        },
+        "plain_why": {
+          "default": "",
+          "title": "Plain Why",
+          "type": "string"
+        },
         "rule_id": {
           "title": "Rule Id",
           "type": "string"
@@ -29,6 +89,11 @@
           ],
           "default": null
         },
+        "suggested_fix": {
+          "default": "",
+          "title": "Suggested Fix",
+          "type": "string"
+        },
         "table_id": {
           "default": "",
           "title": "Table Id",
@@ -38,56 +103,6 @@
           "default": "",
           "title": "Table Name",
           "type": "string"
-        },
-        "key": {
-          "default": "",
-          "title": "Key",
-          "type": "string"
-        },
-        "column": {
-          "default": "",
-          "title": "Column",
-          "type": "string"
-        },
-        "approved_value": {
-          "default": "",
-          "title": "Approved Value",
-          "type": "string"
-        },
-        "export_value": {
-          "default": "",
-          "title": "Export Value",
-          "type": "string"
-        },
-        "approved_ref": {
-          "default": "",
-          "title": "Approved Ref",
-          "type": "string"
-        },
-        "export_ref": {
-          "default": "",
-          "title": "Export Ref",
-          "type": "string"
-        },
-        "message": {
-          "default": "",
-          "title": "Message",
-          "type": "string"
-        },
-        "explanation": {
-          "default": "",
-          "title": "Explanation",
-          "type": "string"
-        },
-        "suggested_fix": {
-          "default": "",
-          "title": "Suggested Fix",
-          "type": "string"
-        },
-        "details": {
-          "additionalProperties": true,
-          "title": "Details",
-          "type": "object"
         }
       },
       "required": [
@@ -99,12 +114,12 @@
     "InputRef": {
       "additionalProperties": false,
       "properties": {
-        "role": {
-          "title": "Role",
-          "type": "string"
-        },
         "name": {
           "title": "Name",
+          "type": "string"
+        },
+        "role": {
+          "title": "Role",
           "type": "string"
         },
         "sha256": {
@@ -143,58 +158,14 @@
   },
   "additionalProperties": false,
   "properties": {
-    "schema_version": {
-      "default": "1.0",
-      "title": "Schema Version",
-      "type": "string"
-    },
-    "tool": {
-      "additionalProperties": {
-        "type": "string"
-      },
-      "title": "Tool",
-      "type": "object"
-    },
-    "run": {
-      "additionalProperties": {
-        "type": "string"
-      },
-      "title": "Run",
-      "type": "object"
-    },
-    "inputs": {
-      "items": {
-        "$ref": "#/$defs/InputRef"
-      },
-      "title": "Inputs",
-      "type": "array"
-    },
-    "verdict": {
-      "title": "Verdict",
-      "type": "string"
-    },
-    "gate": {
-      "title": "Gate",
-      "type": "string"
-    },
-    "exit_code": {
-      "title": "Exit Code",
-      "type": "integer"
-    },
-    "summary": {
-      "additionalProperties": true,
-      "title": "Summary",
-      "type": "object"
-    },
-    "jira": {
-      "additionalProperties": true,
-      "title": "Jira",
-      "type": "object"
-    },
     "baseline": {
       "additionalProperties": true,
       "title": "Baseline",
       "type": "object"
+    },
+    "exit_code": {
+      "title": "Exit Code",
+      "type": "integer"
     },
     "findings": {
       "items": {
@@ -203,12 +174,35 @@
       "title": "Findings",
       "type": "array"
     },
-    "scope_matrix": {
+    "gate": {
+      "title": "Gate",
+      "type": "string"
+    },
+    "info": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Info",
+      "type": "array"
+    },
+    "inputs": {
+      "items": {
+        "$ref": "#/$defs/InputRef"
+      },
+      "title": "Inputs",
+      "type": "array"
+    },
+    "jira": {
+      "additionalProperties": true,
+      "title": "Jira",
+      "type": "object"
+    },
+    "learned_used": {
       "items": {
         "additionalProperties": true,
         "type": "object"
       },
-      "title": "Scope Matrix",
+      "title": "Learned Used",
       "type": "array"
     },
     "mapping": {
@@ -219,27 +213,43 @@
       "title": "Mapping",
       "type": "array"
     },
-    "warnings": {
-      "items": {
-        "type": "string"
-      },
-      "title": "Warnings",
-      "type": "array"
-    },
-    "info": {
-      "items": {
-        "type": "string"
-      },
-      "title": "Info",
-      "type": "array"
-    },
-    "learned_used": {
+    "problems": {
       "items": {
         "additionalProperties": true,
         "type": "object"
       },
-      "title": "Learned Used",
+      "title": "Problems",
       "type": "array"
+    },
+    "run": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Run",
+      "type": "object"
+    },
+    "schema_version": {
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "scope_matrix": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Scope Matrix",
+      "type": "array"
+    },
+    "summary": {
+      "additionalProperties": true,
+      "title": "Summary",
+      "type": "object"
+    },
+    "test_scenarios": {
+      "additionalProperties": true,
+      "title": "Test Scenarios",
+      "type": "object"
     },
     "tolerance_overrides": {
       "items": {
@@ -248,12 +258,23 @@
       "title": "Tolerance Overrides",
       "type": "array"
     },
-    "test_scenarios": {
+    "tool": {
       "additionalProperties": {
-        "type": "integer"
+        "type": "string"
       },
-      "title": "Test Scenarios",
+      "title": "Tool",
       "type": "object"
+    },
+    "verdict": {
+      "title": "Verdict",
+      "type": "string"
+    },
+    "warnings": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Warnings",
+      "type": "array"
     }
   },
   "required": [

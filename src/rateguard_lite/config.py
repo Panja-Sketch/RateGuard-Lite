@@ -78,6 +78,13 @@ class JiraCfg(_Strict):
     llm: LlmCfg = Field(default_factory=LlmCfg)
 
 
+class ScopeCfg(_Strict):
+    # D-032: OUT_OF_SCOPE_TABLE_DATED is off by default (the book-level stamp is shared by most tables, so it is nearly dormant; Engine B covers the baseline case).
+    oos_enabled: bool = False
+    # D-031: a date/edition stamp carried by more than this share of the export's tables cannot single out an individual table.
+    oos_max_stamp_share: float = Field(default=0.30, ge=0.0, le=1.0)
+
+
 class TestsCfg(_Strict):
     max_per_table: int = 25
     max_must_tests: int = Field(default=8, ge=3, le=20)      # D-026: short 'Must Test' list; hard cap 20
@@ -95,6 +102,7 @@ class Config(_Strict):
     metadata: MetadataCfg = Field(default_factory=MetadataCfg)
     jira: JiraCfg = Field(default_factory=JiraCfg)
     tests: TestsCfg = Field(default_factory=TestsCfg)
+    scope: ScopeCfg = Field(default_factory=ScopeCfg)
 
 
 def config_dir() -> Path:

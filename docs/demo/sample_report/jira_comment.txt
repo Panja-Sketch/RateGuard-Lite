@@ -1,0 +1,25 @@
+RateGuard-Lite: FAIL - Some values in PolicyCenter don't match what was approved. Fix these before QA.
+1 table has problems (1 cell).
+Rate book BOPByPeril_OR_RateBook edition 2025-V2, filing effective 2027-03-15.
+Tables: 8 analyzed, 7 matched, 1 with discrepancies, 0 scope violation(s). Cells compared: 89.
+Baseline: provided (baseline.xlsx, edition 2025-V1).
+We also checked tables outside this change against the 'before' export: provided (baseline.xlsx, edition 2025-V1).
+
+What needs fixing:
+* [Critical] Table '121 BLD Number of Stories' (4 to 6 stories): the Stories Factor value in PolicyCenter is not the approved value. Approved 1.045, PolicyCenter has 1.025 (1.9% lower). Change the value in PolicyCenter to 1.045 and export the rate book again.
+
+Next steps:
+1. Change the value in PolicyCenter to 1.045 and export the rate book again. (121 BLD Number of Stories)
+
+MUST TEST (top 8)
+ 1. After the fix, quote the exact row that was wrong in 121 BLD Number of Stories.
+ 2. Quote on the filing date using the changed 121 BLD Number of Stories table.
+ 3. Quote a new business policy effective the day before the filing date.
+ 4. Renew a policy with an effective date on or after the filing date.
+ 5. Quote a policy that uses the new row in 10 Vandalism Exclusion.
+ 6. Quote a policy that uses the new row in 42 GL Class Code Factor.
+ 7. Make a mid-term policy change on a policy whose term started before the filing date.
+ 8. Quote exactly on the lower edge of a 121 BLD Number of Stories band, where the factor changes.
+Full candidate list: test_scenarios.xlsx > All Candidates
+
+Run R-20261108-224300-2a77. Full detail is in the attached reports on the QA share.

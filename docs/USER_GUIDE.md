@@ -30,6 +30,9 @@ Open `results\PC-12345\reconciliation_report.html`.
 
 To tell the team, paste `jira_comment.txt` into the story.
 
+### Problems by table
+The report groups everything found in one table into one item: how many cells, what kind of problem, and a likely cause when the evidence is clear (for example "values look copied from table 551" or "the same rows are written differently: '300k' and '300000'"). Open an item to see its rows. The full cell-by-cell list is still in the All findings tab and in the Excel sheet Discrepancies.
+
 ## 4. Common situations
 
 **"NEEDS_MAPPING / BLOCKED: table could not be matched."**
@@ -40,7 +43,7 @@ The approved tab name and the Guidewire table name look too different. Run `rgl 
 **"Scope check ... not performed – no baseline provided."**
 You ran without `--baseline`. All approved values were verified, but changes to *other* tables could not be compared, so that check was not done (the verdict can still be PASS). To run it, add `--baseline <export of the rate book before the change>`. If your team's profile sets `verdict.require_baseline_for_pass: true`, such a run is `PASS_WITH_LIMITATIONS` instead.
 
-**"NEEDS_REVIEW: OUT_OF_SCOPE_TABLE_DATED."**
+**"NEEDS_REVIEW: OUT_OF_SCOPE_TABLE_DATED."** (only if your team has switched this optional check on; it is off by default)
 A table that is not in the approved workbook or the Jira story carries this filing's effective date or edition in its own metadata, so someone may have loaded or edited it by mistake. Ask the developer, then either add it to the story and approved file or restore its old date/edition. If the export has no per-table dates (or every table has the same stamp) this check is skipped and noted in `run_manifest.json`.
 
 **"I skipped a suggestion in `rgl review`."** It is kept locally as PROPOSED and is not used. See `rgl learn list --status PROPOSED`, then `rgl learn confirm <id>` to write it to the team file.

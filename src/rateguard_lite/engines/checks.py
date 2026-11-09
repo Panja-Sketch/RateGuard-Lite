@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections import Counter
 
 from ..config import Config
@@ -12,7 +13,19 @@ from .common import build_index, key_text, make_finding, ref
 _CAP = 50
 
 
-def integrity_findings(t: RateTable, pair_id: str, display: str, side: str, cfg: Config) -> list[Finding]:
+_PADDED = re.compile(r"^0\d+$")
+
+
+def _has_padded_codes(t: RateTable) -> bool:
+    """True when any key cell of the table is a zero-padded code such as 0123 (the only case where a lost zero can matter)."""
+    for r in t.rows:
+        for c in r.key:
+            if c.value and _PADDED.match(c.value):
+                return True
+    return False
+
+
+def integrity_findings(t: RateTable, pair_id: str, display: str, side: str, cfg: Config, other: RateTable | None = None) -> list[Finding]:
     out: list[Finding] = []
     idx = build_index(t)
     for k, first, dup in idx.duplicates[:_CAP]:
@@ -69,6 +82,8 @@ def integrity_findings(t: RateTable, pair_id: str, display: str, side: str, cfg:
         "FORMULA_CACHED": ("INFO", "formula cell(s) were read from cached values"),
         "PERCENT_SIGN_IGNORED": ("WARNING", "percent sign(s) ignored (column is not configured as percent)"),
     }
+    if counts["POSSIBLE_LEADING_ZERO_LOSS"] and other is not None and not _has_padded_codes(t) and not _has_padded_codes(other):
+        counts["POSSIBLE_LEADING_ZERO_LOSS"] = 0     # D-031: plain integers on both sides (e.g. protection class 1-10); nothing to lose
     for fl, (sev, text) in agg.items():
         if counts[fl]:
             out.append(make_finding(fl, severity=Severity(sev), table_id=pair_id, table_name=display,

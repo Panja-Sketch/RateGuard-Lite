@@ -57,8 +57,15 @@ def _status(message: str) -> AbstractContextManager[Any]:
     return console.status(message) if sys.stdout.isatty() else nullcontext()
 
 
+def _version_flag(value: bool) -> None:
+    if value:
+        _utf8_streams()
+        console.print(f"RateGuard-Lite {__version__}\nData folder: {data_dir()}")
+        raise typer.Exit(0)
+
+
 @app.callback()
-def _main(ctx: typer.Context) -> None:
+def _main(ctx: typer.Context, version: Annotated[bool, typer.Option("--version", callback=_version_flag, is_eager=True, help="Show version and data folder, then exit")] = False) -> None:
     _utf8_streams()
     install_socket_guard()
 

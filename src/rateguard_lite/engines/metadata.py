@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from typing import Any
+
 from ..config import Config
 from ..ingest.jira import JiraScope
 from ..mapping.tables import TablePair
@@ -40,9 +43,25 @@ def audit_metadata(export: RateBook, approved: RateBook | None, baseline_meta: d
                                         approved_value=fd, export_value=td, export_ref=f"{p.export.source.file}!{p.export.source.sheet}",
                                         message=f"Table effective date {td} does not match the filing effective date {fd}.",
                                         plain_what=f"Table '{p.display}' starts on {td}, but the story says the filing starts on {fd}."))
-    if jira.states and em.get("jurisdiction") and em["jurisdiction"].upper() not in jira.states:
+    book_state_wrong = bool(jira.states and em.get("jurisdiction") and em["jurisdiction"].upper() not in jira.states)
+    if book_state_wrong:
         out.append(make_finding("SCOPE_METADATA_MISMATCH", severity=Severity.HIGH, approved_value=",".join(jira.states),
                                 export_value=em["jurisdiction"], message=f"Export jurisdiction {em['jurisdiction']} is not in the Jira state(s) {','.join(jira.states)}."))
+    elif jira.states:
+        # D-029: one finding per table whose own state label differs from the rate book's state (a book-level vote hides a lone odd table)
+        shown = "/".join(jira.states)
+        for p in pairs:
+            if p.export is None:
+                continue
+            label = (p.export.metadata.get("jurisdiction") or "").strip()
+            if label and label.upper() not in jira.states:
+                out.append(make_finding(
+                    "SCOPE_METADATA_MISMATCH", severity=Severity.HIGH, table_id=p.id, table_name=p.display, approved_value=shown, export_value=label,
+                    export_ref=f"{p.export.source.file}!{p.export.source.sheet}",
+                    message=f"Table jurisdiction {label} is not in the Jira state(s) {shown}.",
+                    plain_what=f"This table is labelled {label} but this is the {shown} rate book.",
+                    plain_why="Its values may belong to another state, so policies in this state could be rated with the wrong numbers.",
+                    plain_action=f"Check which state's values were loaded into '{p.display}', fix the table, and export again."))
     if jira.lob and em.get("lob") and em["lob"].upper() != jira.lob.upper():
         out.append(make_finding("SCOPE_METADATA_MISMATCH", severity=Severity.HIGH, approved_value=jira.lob, export_value=em["lob"],
                                 message=f"Export line of business {em['lob']} differs from Jira {jira.lob}."))
@@ -63,12 +82,14 @@ def audit_metadata(export: RateBook, approved: RateBook | None, baseline_meta: d
     return out
 
 
-def out_of_scope_dated(pairs: list[TablePair], export: RateBook, jira: JiraScope) -> tuple[list[Finding], list[str]]:
+def out_of_scope_dated(pairs: list[TablePair], export: RateBook, jira: JiraScope, deltas: Mapping[str, Any] | None = None,
+                       max_share: float = 0.30) -> tuple[list[Finding], list[str]]:
     """OUT_OF_SCOPE_TABLE_DATED (D-024): an export table that is neither in the approved file nor in Jira, yet carries the
     filing effective date or the export's new edition in its own metadata, may have been touched or loaded by mistake.
 
-    Returns (findings, notes). Notes go to the run manifest. If a stamp is absent everywhere, or identical on every table
-    (a book-level stamp that says nothing about an individual table), that stamp is skipped silently.
+    Returns (findings, notes). Notes go to the run manifest. If a stamp is absent everywhere, or carried by more than `max_share`
+    of the tables (D-031: a stamp that common says nothing about an individual table), that stamp is skipped.
+    With a baseline (`deltas` given) only tables that really changed against it are flagged (D-031).
     """
     notes: list[str] = []
     stamps = {"effective_date": jira.filing_effective_date, "edition": (export.metadata.get("edition") or "").strip().upper() or None}
@@ -86,6 +107,9 @@ def out_of_scope_dated(pairs: list[TablePair], export: RateBook, jira: JiraScope
             notes.append(f"{k}: no reference value (Jira filing date / export edition); check skipped.")
         elif len(set(values)) == 1:
             notes.append(f"{k}: every table carries the same value, so it cannot single out a table; check skipped.")
+        elif sum(1 for v in values if (v.upper() if k == "edition" else v) == target) > max_share * len(values):
+            share = sum(1 for v in values if (v.upper() if k == "edition" else v) == target) / len(values)
+            notes.append(f"{k}: {share:.0%} of the tables carry the filing's value, so it cannot single out a table; check skipped.")
         else:
             active.append(k)
     out: list[Finding] = []
@@ -94,6 +118,10 @@ def out_of_scope_dated(pairs: list[TablePair], export: RateBook, jira: JiraScope
     for p in pairs:
         if p.export is None or p.approved is not None or p.jira:
             continue
+        if deltas is not None:
+            d = deltas.get(p.id)
+            if d is not None and getattr(d, "empty", False):
+                continue                  # the baseline shows this table did not change
         hits = []
         for k in active:
             v, target = per_table[p.id][k], stamps[k]

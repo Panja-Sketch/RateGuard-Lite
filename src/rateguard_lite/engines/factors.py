@@ -17,6 +17,12 @@ from .common import Index, KeyT, build_index, key_names, key_text, make_finding,
 MAX_ROUNDED_FINDINGS = 500
 
 
+def where_text_for(table: str, key: str) -> str:
+    from ..plain import pretty_key
+    k = pretty_key(key)
+    return f"Table '{table}' ({k})" if k else f"Table '{table}'"
+
+
 @dataclass
 class FactorResult:
     findings: list[Finding] = field(default_factory=list)
@@ -91,6 +97,11 @@ def _wildcard_pairs(missing: list[KeyT], extra: list[KeyT]) -> tuple[list[tuple[
     return pairs, used_m, used_e
 
 
+def _has_unreadable_cells(t: Any) -> bool:
+    bad = {"EXCEL_ERROR", "FORMULA_NO_VALUE", "UNPARSEABLE"}
+    return any(bad & {fl.split(":")[0] for fl in c.flags} for r in t.rows for c in (*r.key, *r.factors.values()))
+
+
 def compare_pair(pair: TablePair, cfg: Config) -> FactorResult:
     a, e = pair.approved, pair.export
     assert a is not None and e is not None
@@ -101,6 +112,8 @@ def compare_pair(pair: TablePair, cfg: Config) -> FactorResult:
         res.findings.append(make_finding(rule, status=Status.NEEDS_MAPPING, table_id=tid, table_name=tname, message=msg))
 
     if key_names(a) != key_names(e):
+        if _has_unreadable_cells(a):
+            return res                       # D-031: the unreadable cell is already reported as a blocker; do not add a second finding for it
         nm("NEEDS_MAPPING", f"Key columns differ: approved {key_names(a)} vs export {key_names(e)}. Confirm column mapping.")
         return res
     a_f = {c.canonical_name: c for c in a.factor_columns()}
@@ -137,8 +150,13 @@ def compare_pair(pair: TablePair, cfg: Config) -> FactorResult:
             res.stats["compared"] += 1
             ctx: dict[str, Any] = dict(table_id=tid, table_name=tname, key=key_text(a, k), column=a_f[fname].source_header,
                        approved_ref=ref(a, ac), export_ref=ref(e, ec), approved_value=ac.raw or "", export_value=ec.raw or "")
+            if "FORMULA_NO_VALUE" in ac.flags:
+                continue                      # D-031: reported once, as a blocker, by the integrity checks
             if ac.kind == "BLANK":
-                res.findings.append(make_finding("BLANK_FACTOR", severity=Severity.HIGH, message="Approved factor is blank.", **ctx))
+                res.findings.append(make_finding("BLANK_FACTOR", severity=Severity.HIGH, message="Approved factor is blank.",
+                                                 plain_what=f"{where_text_for(tname, ctx['key'])}: the approved workbook has no {ctx['column']} value here ({ctx['approved_ref']}).",
+                                                 plain_why="Without an approved value we cannot say what PolicyCenter should hold.",
+                                                 plain_action="Fill in the approved value in the approved workbook, or ask the actuary for it, then run again.", **ctx))
                 continue
             if ec.kind == "BLANK":
                 res.findings.append(make_finding("BLANK_FACTOR", severity=Severity.CRITICAL,

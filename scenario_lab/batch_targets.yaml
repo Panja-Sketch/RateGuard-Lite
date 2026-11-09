@@ -1,0 +1,18 @@
+# Targets for the batch-fix phase (D-029..D-031): which "likely cause" the tool should show for a planted problem.
+# Written from the planted defects (what really went wrong in each synthetic table), not from the tool's output.
+# This file is separate from cases.yaml on purpose: cases.yaml expectations are never edited.
+diagnosis:
+  - {case: F6, table: 571, kind: KEY_FORMAT, what: ILF limits 100k/300k/1M against 100000...}
+  - {case: F6, table: 572, kind: KEY_LABEL, what: Commercial against CMP_MONO}
+  - {case: F6, table: 573, kind: KEY_TYPO, what: ccpl_ against ccp_}
+  - {case: F6, table: 574, kind: KEY_TYPO, what: W/Application against W/Appliance}
+  - {case: F4, table: 550, kind: COLUMNS_SWAPPED, what: BLD factors in the BPP column}
+  - {case: F4, table: 552, kind: COPIED_FROM, what: Cov A-D factors pasted into Cov E}
+  - {case: F4, table: 553, kind: COPIED_FROM, what: Cov A-D factors pasted into Cov F}
+  - {case: F4, table: 554, kind: COPIED_FROM, what: Cov A-D factors pasted into Cov G}
+  - {case: F9, table: 590, kind: WHOLE_TABLE, what: Arizona values in a California table}
+  - {case: F9, table: 591, kind: WHOLE_TABLE, what: Arizona values in a California table}
+  - {case: F9, table: 592, kind: WHOLE_TABLE, what: Arizona values in a California table}
+  - {case: F9, table: 593, kind: WHOLE_TABLE, what: Arizona values in a California table}
+  - {case: F9, table: 594, kind: WHOLE_TABLE, what: Arizona values in a California table}
+  - {case: F2, table: 530, kind: VALUES_DIFFER, what: Two unrelated wrong values - no pattern, so no guess}

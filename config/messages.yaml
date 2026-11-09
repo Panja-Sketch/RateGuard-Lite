@@ -125,7 +125,7 @@ DUPLICATE_KEY:
 FORMULA_NO_VALUE:
   what: "A cell in {table} ({approved_cell}) is a formula with no saved result."
   why: "We cannot read the approved number, so it was not checked."
-  action: "Open the workbook in Excel, let it recalculate, save it, and run again."
+  action: "Open the approved workbook ({approved_cell}) in Excel, let it recalculate, save it, and run again."
 EXCEL_ERROR:
   what: "A cell in {table} ({approved_cell}) shows an Excel error."
   why: "We cannot read the approved number, so it was not checked."
@@ -230,3 +230,7 @@ LOB_UNRESOLVED:
   what: "The story does not name a line of business, so we used the one in the export."
   why: "The line of business decides which table numbers and names apply."
   action: "Add 'LOB: XXX' to the story, or pass --lob."
+BYPASS_NOT_CHECKED:
+  what: "We can't tell whether tables marked DO NOT LOAD were changed without a 'before' export."
+  why: "A table that should not change may have been changed without anyone noticing."
+  action: "Check those tables by hand, or run again with --baseline."

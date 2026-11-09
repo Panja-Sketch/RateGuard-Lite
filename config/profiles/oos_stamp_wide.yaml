@@ -1,0 +1,4 @@
+# Test/diagnostic profile: enable OUT_OF_SCOPE_TABLE_DATED (off by default, D-032) and let it run even when many tables share the stamp (D-031).
+scope:
+  oos_enabled: true
+  oos_max_stamp_share: 1.0

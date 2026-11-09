@@ -1,5 +1,7 @@
 # RateGuard·Lite
 
+> **Start here:** [Install guide](docs/INSTALL.md) · [First run on real files](docs/FIRST_REAL_RUN.md) · [60-second demo with screenshots](docs/demo/index.html) · [Changelog](CHANGELOG.md)
+
 **Did every approved rate land correctly in Guidewire?** RateGuard-Lite answers that, cell by cell, on your own machine.
 
 It compares a Guidewire PolicyCenter rate book export with the **approved rate workbook** and the **Jira story**, and tells you:
@@ -20,6 +22,7 @@ git clone <your internal repo> ; cd RateGuard-Lite
 .\setup.ps1                  # creates .venv, installs, runs the self-test
 .\.venv\Scripts\Activate.ps1
 
+rgl --version                # 1.1.0
 rgl sample --out demo        # synthetic inputs (no real carrier data)
 rgl run --approved demo\factor_mismatch\approved.xlsx `
         --jira     demo\factor_mismatch\jira.txt `
@@ -73,7 +76,7 @@ When you confirm a table match once, it is saved in `config/team_mappings.yaml` 
 
 - It verifies **rate table contents and scope**, not rating algorithms, premium maths, or Guidewire rate book selection logic (the transaction matrix gives QA tests for that).
 - Guidewire export layouts vary. On a new Guidewire version run `rgl inspect FILE` first and adjust `config/gw_layouts.yaml` if needed.
-- Without `--baseline`, changes to tables outside the approved file cannot be detected by comparison. The run still passes if nothing else is wrong and every report shows *"Scope check (tables outside approved/Jira): not performed – no baseline provided"*. The extra `OUT_OF_SCOPE_TABLE_DATED` check partly covers the gap using each table's own date/edition. Set `verdict.require_baseline_for_pass: true` (or `--profile strict_baseline`) to cap such runs at `PASS_WITH_LIMITATIONS`. Snapshot History is optional and off by default (`--profile snapshots` or `--accept-snapshot`).
+- Without `--baseline`, changes to tables outside the approved file cannot be detected by comparison. The run still passes if nothing else is wrong and every report shows *"Scope check (tables outside approved/Jira): not performed – no baseline provided"*. (The optional `OUT_OF_SCOPE_TABLE_DATED` date check is off by default since v1.1, D-032; `scope.oos_enabled` turns it on.) Set `verdict.require_baseline_for_pass: true` (or `--profile strict_baseline`) to cap such runs at `PASS_WITH_LIMITATIONS`. Snapshot History is optional and off by default (`--profile snapshots` or `--accept-snapshot`).
 - Jira parsing is pattern-based; unusual phrasing becomes `NEEDS_REVIEW`.
 - The approved workbook is treated as truth. The tool does not validate actuarial correctness.
 - Not yet implemented (see [docs/DECISIONS.md](docs/DECISIONS.md)): learned *layout* fingerprints applied to header detection, and the optional local-LLM Jira assist (config flag exists, default off).

@@ -106,7 +106,8 @@ def test_out_of_scope_table_dated_details(scenario, tmp_path):                  
 def test_out_of_scope_check_skips_silently_without_per_table_stamps(scenario, tmp_path):
     o = run_scenario(scenario("clean_pass"), tmp_path, write_reports=True)          # every table carries the same stamp
     assert not [f for f in o.result.findings if f.rule_id == "OUT_OF_SCOPE_TABLE_DATED"]
-    assert any("check skipped" in n for n in o.result.check_notes["out_of_scope_table_dated"])
+    assert any("disabled" in n for n in o.result.check_notes["out_of_scope_table_dated"])     # D-032: off by default
+
 
 
 def test_run_with_stdout_redirected_to_a_file_does_not_crash(scenario, tmp_path):                           # D-025

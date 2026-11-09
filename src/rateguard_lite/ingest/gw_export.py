@@ -9,7 +9,7 @@ from typing import Literal
 from ..config import Config
 from ..guard.safety import safety_gate_workbook
 from ..learning.context import LearnedContext
-from ..mapping.identity import canonical_id
+from ..mapping.identity import canonical_id, extract_number
 from ..model.core import ColumnType, RateBook, RateTable
 from .approved import META_SHEETS
 from .fastxlsx import FastWorkbookReader
@@ -70,9 +70,11 @@ def ingest_export(
             eff_lob = lob or md.get("lob") or "GW"
             nid = canonical_id(eff_lob, code, tname, s.name)
             if nid in tables:
-                res.issues.append(SheetIssue(path.name, s.name, "NEEDS_MAPPING", f"Table identity {nid} appears on more than one sheet."))
-                unmapped.append(s.name)
-                continue
+                if extract_number(code, strict=True) or extract_number(tname, strict=True) or extract_number(s.name, strict=True):
+                    res.issues.append(SheetIssue(path.name, s.name, "NEEDS_MAPPING", f"Table identity {nid} appears on more than one sheet."))
+                    unmapped.append(s.name)
+                    continue
+                nid = f"{nid}~{canonical_id(eff_lob, s.name).split(':', 1)[1]}"     # D-029: same name, no number - keep both
             t = build_table(
                 grid=g, file_name=path.name, sha256=rd.sha256, origin=origin, native_id=nid,
                 display_name=tname or code or s.name, header_row=lay.header_row, data_start=lay.data_start,

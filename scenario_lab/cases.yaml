@@ -1,0 +1,382 @@
+# Scenario Lab - case definitions and EXPECTED outcomes.
+#
+# The expected values below were written from the build spec (RateGuard-Lite_Build_Spec.md),
+# docs/FINDING_CATALOG.md and docs/DECISIONS.md BEFORE the lab was ever run. They must not be
+# edited after seeing results: if the tool disagrees, that is a finding about the tool (a gap),
+# not a reason to change the expectation.
+#
+# Verdict precedence (documented in verdict.py / README): BLOCKED > FAIL > NEEDS_REVIEW >
+# PASS_WITH_LIMITATIONS > PASS_WITH_WARNINGS > PASS.
+#
+# NOTE (batch-fix phase): three expectations were corrected because they were the lab's own errors, as acknowledged by the owner:
+# H5 (wording superseded by D-027), F7-582a (two agreeing checks may both report), F8-585 (date is reported once for the whole book).
+# Probe fields:
+#   table        table number (as it starts the table name, e.g. 501) or null for a book-level check
+#   flag         true  = the tool must raise something above INFO for this table (a defect was planted)
+#                false = the tool must leave this table alone (a control / equivalent representation)
+#   rules_any    at least one of these finding IDs must be raised for the table
+#   rules_all    all of these finding IDs must be raised for the table
+#   forbid       none of these finding IDs may be raised for the table
+#   max_findings noise limit: more non-INFO findings than this for ONE root cause = "noisy"
+#   run          restrict the probe to one run (by name)
+catalog:
+  1: Base rate
+  2: LCM (loss cost multiplier)
+  3: Split policy type matrix
+  6: ISO loss cost refresh
+  7: Selective class codes
+  8: New class rows
+  9: Multi-column class factors
+  11: Discontinued codes
+  12: Stories tiers
+  13: BCEG
+  14: Territory / ZIP
+  15: Protection class
+  16: Census block factors
+  17: EQ zone 4-key matrix
+  18: New deductible rows
+  19: Coverage-specific deductibles
+  20: PD deductible insert
+  21: ILF limits
+  22: Coinsurance
+  24: AI fees
+  25: Mitigation discount labels
+  26: Multi-policy booleans
+  27: Tenure tiers
+  28: Exclusion factors
+  29: MRD credit
+  30: New coverage table
+  31: EPL tier tables
+  32: Vehicle symbol ranges
+  33: Umbrella underlying keys
+  35: Table bypass
+  36: Deprecated / strikethrough table
+  38: High-precision decimals
+  39: Booleans
+  40: ">= operators"
+  41: Wildcards
+  42: Code typos
+  43: State mirroring
+  44: Edition / effective date
+
+cases:
+  # ------------------------------------------------------------------ HAPPY PATHS
+  - id: H1
+    group: happy
+    title: Base rate, loss cost multiplier and ISO loss cost refresh loaded correctly
+    catalog_items: [1, 2, 6]
+    description: >
+      A base rate table (+5%), a loss cost multiplier table (+3%) and a very large ISO loss cost
+      table (14,400 cells, +2.5%) are all refreshed. Everything is loaded exactly as approved.
+    tables: {501: BLD Base Rate Refresh, 502: Loss Cost Multiplier, 503: ISO Loss Cost BLD}
+    runs:
+      - {name: with baseline, baseline: true, expected: {verdict: PASS, exit: 0, rules: [], forbid: [VALUE_MISMATCH], max_runtime_s: 90}}
+    probes:
+      - {id: H1-501, items: [1], table: 501, flag: false, what: Base rate loaded correctly}
+      - {id: H1-502, items: [2], table: 502, flag: false, what: Loss cost multiplier loaded correctly}
+      - {id: H1-503, items: [6], table: 503, flag: false, what: 14,400-cell ISO loss cost refresh loaded correctly}
+
+  - id: H2
+    group: happy
+    title: Approved values have 6 to 8 decimals, PolicyCenter holds 4 - rounding only
+    catalog_items: [16, 38]
+    description: >
+      Census block factors are approved at 6 decimals and a high-precision rate table at 8 decimals.
+      PolicyCenter stores 4 decimals. This is normal rounding and must not be a failure.
+    tables: {504: Census Block Factor, 505: High Precision Rate Factor}
+    runs:
+      - {name: with baseline, baseline: true, expected: {verdict: PASS, exit: 0, rules: [MATCH_ROUNDED], forbid: [VALUE_MISMATCH, PRECISION_TRUNCATION]}}
+    probes:
+      - {id: H2-504, items: [16], table: 504, flag: false, what: 6-decimal census block factors rounded to 4}
+      - {id: H2-505, items: [38], table: 505, flag: false, what: 8-decimal rates rounded to 4}
+
+  - id: H3
+    group: happy
+    title: New coverage table, new class rows, new deductible tiers and new EPL tier table
+    catalog_items: [8, 18, 20, 30, 31]
+    description: >
+      A brand-new coverage table, three new class codes, new deductible tiers, a new PD deductible
+      tier inserted between existing ones, and a new EPL limit tier table. All loaded correctly.
+    tables: {506: Cyber Coverage Factor, 507: Liability Class Relativity, 508: AOP Deductible Tier, 509: PD Deductible Factor, 510: EPL Limit Tier Factor}
+    runs:
+      - {name: with baseline, baseline: true, expected: {verdict: PASS, exit: 0, rules: [], forbid: [MISSING_ROW_IN_EXPORT, EXTRA_ROW_IN_EXPORT, UNDECLARED_CHANGE]}}
+    probes:
+      - {id: H3-506, items: [30], table: 506, flag: false, what: New coverage table}
+      - {id: H3-507, items: [8], table: 507, flag: false, what: New class rows}
+      - {id: H3-508, items: [18], table: 508, flag: false, what: New deductible tiers}
+      - {id: H3-509, items: [20], table: 509, flag: false, what: PD deductible tier inserted}
+      - {id: H3-510, items: [31], table: 510, flag: false, what: New EPL tier table}
+
+  - id: H4
+    group: happy
+    title: Equivalent ways of writing the same value
+    catalog_items: [14, 15, 26, 39, 41]
+    description: >
+      Yes/No in the approved file against TRUE/FALSE in PolicyCenter, TRUE/FALSE against 1/0,
+      wildcard written as *, ALL or blank, ZIP codes with a leading zero (01234) stored as numbers
+      in the approved file, and protection classes 8B and 10 written as text or numbers.
+    tables: {511: Multi Policy Discount, 512: Package Credit Flag, 513: Class Wildcard Star, 514: Class Wildcard ALL, 515: Class Wildcard Blank, 516: ZIP Territory Factor, 517: PPC Grade Factor}
+    runs:
+      - {name: with baseline, baseline: true, expected: {verdict: PASS, exit: 0, rules: [], forbid: [VALUE_MISMATCH, WILDCARD_MISMATCH, MISSING_ROW_IN_EXPORT, EXTRA_ROW_IN_EXPORT]}}
+    probes:
+      - {id: H4-511, items: [26, 39], table: 511, flag: false, what: Yes/No against TRUE/FALSE}
+      - {id: H4-512, items: [39], table: 512, flag: false, what: TRUE/FALSE against 1/0}
+      - {id: H4-513, items: [41], table: 513, flag: false, what: Wildcard * against blank}
+      - {id: H4-514, items: [41], table: 514, flag: false, what: Wildcard ALL against *}
+      - {id: H4-515, items: [41], table: 515, flag: false, what: Blank wildcard against ALL}
+      - {id: H4-516, items: [14], table: 516, flag: false, what: ZIP with leading zero stored as number}
+      - {id: H4-517, items: [15], table: 517, flag: false, what: Protection class 8B and 10}
+
+  - id: H5
+    group: happy
+    title: Approved file equals PolicyCenter, no before-export given
+    catalog_items: [1]
+    description: >
+      Two tables are loaded exactly as approved. No baseline is supplied, so the tool cannot check
+      tables outside the change. It must still pass and say that scope check was not performed.
+    tables: {518: Fire Alarm Credit, 519: Sprinkler Credit Factor}
+    runs:
+      - {name: no baseline, baseline: false, expected: {verdict: PASS, exit: 0, rules: [], verdict_text_contains: [did not check tables outside]}}
+    probes:
+      - {id: H5-518, items: [1], table: 518, flag: false, what: Table equals approved}
+      - {id: H5-519, items: [1], table: 519, flag: false, what: Table equals approved}
+
+  # ------------------------------------------------------------------ FAILURES
+  - id: F1
+    group: failure
+    title: Value errors across tables
+    catalog_items: [1, 13, 22, 24, 28]
+    description: >
+      One base rate with a wrong factor, one with a decimal shift (0.005 became 0.0005), one with two
+      digits swapped, one with a blank factor; BCEG grades 1 and 10 swapped; a wrong coinsurance
+      factor; a wrong additional insured fee; a wrong exclusion factor.
+    tables: {520: Base Rate Wrong Factor, 521: Base Rate Decimal Shift, 522: Base Rate Transposition, 523: Base Rate Blank Factor, 524: BCEG Factor, 525: Coinsurance Factor, 526: Additional Insured Fee, 527: Exclusion Factor}
+    runs:
+      - {name: with baseline, baseline: true, expected: {verdict: FAIL, exit: 1, rules: [VALUE_MISMATCH, ORDER_OF_MAGNITUDE, TRANSPOSITION, BLANK_FACTOR]}}
+    probes:
+      - {id: F1-520, items: [1], table: 520, flag: true, rules_any: [VALUE_MISMATCH], max_findings: 1, what: Wrong base rate factor}
+      - {id: F1-521, items: [1], table: 521, flag: true, rules_any: [ORDER_OF_MAGNITUDE], max_findings: 1, what: Decimal point shifted}
+      - {id: F1-522, items: [1], table: 522, flag: true, rules_any: [TRANSPOSITION], max_findings: 1, what: Digits transposed}
+      - {id: F1-523, items: [1], table: 523, flag: true, rules_any: [BLANK_FACTOR], max_findings: 1, what: Blank factor}
+      - {id: F1-524, items: [13], table: 524, flag: true, rules_any: [VALUE_MISMATCH], max_findings: 2, what: BCEG grade 1 and 10 values swapped}
+      - {id: F1-525, items: [22], table: 525, flag: true, rules_any: [VALUE_MISMATCH], max_findings: 1, what: Coinsurance factor wrong}
+      - {id: F1-526, items: [24], table: 526, flag: true, rules_any: [VALUE_MISMATCH], max_findings: 1, what: Additional insured fee wrong}
+      - {id: F1-527, items: [28], table: 527, flag: true, rules_any: [VALUE_MISMATCH], max_findings: 1, what: Exclusion factor wrong}
+
+  - id: F2
+    group: failure
+    title: Selective class code change - one wrong, one untouched code altered
+    catalog_items: [7]
+    description: >
+      3,000 class codes; 30 have an approved change. In PolicyCenter 29 are right, one is changed to
+      the wrong value, and one code that should not have changed was altered.
+    tables: {530: Class Code Factor}
+    runs:
+      - {name: with baseline, baseline: true, expected: {verdict: FAIL, exit: 1, rules: [VALUE_MISMATCH], counts: {VALUE_MISMATCH: 2}}}
+    probes:
+      - {id: F2-530, items: [7], table: 530, flag: true, rules_any: [VALUE_MISMATCH], max_findings: 2, what: Exactly two bad codes among 3,000}
+
+  - id: F3
+    group: failure
+    title: Row structure errors
+    catalog_items: [8, 11, 18, 20]
+    description: >
+      A new class code missing, a discontinued class code still present, a new deductible row
+      missing, a PD deductible insert missing, and a repeated key with a different value.
+    tables: {540: Class Factor New Code Missing, 541: Class Factor Discontinued Code, 542: Deductible New Row Missing, 543: Duplicate Key Factor, 544: PD Deductible Insert Missing}
+    runs:
+      - {name: with baseline, baseline: true, expected: {verdict: BLOCKED, exit: 2, rules: [MISSING_ROW_IN_EXPORT, EXTRA_ROW_IN_EXPORT, DUPLICATE_KEY]}}
+    probes:
+      - {id: F3-540, items: [8], table: 540, flag: true, rules_any: [MISSING_ROW_IN_EXPORT], max_findings: 1, what: New class code missing}
+      - {id: F3-541, items: [11], table: 541, flag: true, rules_any: [EXTRA_ROW_IN_EXPORT], max_findings: 1, what: Discontinued code still present}
+      - {id: F3-542, items: [18], table: 542, flag: true, rules_any: [MISSING_ROW_IN_EXPORT], max_findings: 1, what: New deductible row missing}
+      - {id: F3-543, items: [18], table: 543, flag: true, rules_any: [DUPLICATE_KEY], max_findings: 2, what: Same key twice with different values}
+      - {id: F3-544, items: [20], table: 544, flag: true, rules_any: [MISSING_ROW_IN_EXPORT], max_findings: 1, what: PD deductible insert missing}
+
+  - id: F4
+    group: failure
+    title: Column swap and copy-paste across coverage tables
+    catalog_items: [9, 19]
+    description: >
+      Building factors loaded into the business personal property column; Coverage A-D deductible
+      factors pasted into the Coverage E, F and G deductible tables.
+    tables: {550: Class BLD BPP Factors, 551: Cov A-D Deductible Factor, 552: Cov E Deductible Factor, 553: Cov F Deductible Factor, 554: Cov G Deductible Factor}
+    runs:
+      - {name: with baseline, baseline: true, expected: {verdict: FAIL, exit: 1, rules: [VALUE_MISMATCH]}}
+    probes:
+      - {id: F4-550, items: [9], table: 550, flag: true, rules_any: [VALUE_MISMATCH], what: BLD factor in BPP column}
+      - {id: F4-551, items: [19], table: 551, flag: false, what: Cov A-D table is correct}
+      - {id: F4-552, items: [19], table: 552, flag: true, rules_any: [VALUE_MISMATCH], what: Cov E has Cov A-D factors}
+      - {id: F4-553, items: [19], table: 553, flag: true, rules_any: [VALUE_MISMATCH], what: Cov F has Cov A-D factors}
+      - {id: F4-554, items: [19], table: 554, flag: true, rules_any: [VALUE_MISMATCH], what: Cov G has Cov A-D factors}
+
+  - id: F5
+    group: failure
+    title: Range and tier errors
+    catalog_items: [12, 17, 27, 29, 32]
+    description: >
+      A stories band shifted by one; a gap in Year Built inside a 4-key earthquake matrix;
+      overlapping tenure tiers; an MRD credit threshold moved by one; a gap in vehicle model years.
+    tables: {560: Stories Tier Factor, 561: EQ Zone Matrix, 562: Tenure Tier Factor, 563: MRD Credit Threshold, 564: Vehicle Model Year Factor}
+    runs:
+      - {name: with baseline, baseline: true, expected: {verdict: FAIL, exit: 1, rules: [RANGE_GAP, RANGE_OVERLAP, OFF_BY_ONE_BOUNDARY]}}
+    probes:
+      - {id: F5-560, items: [12], table: 560, flag: true, rules_any: [OFF_BY_ONE_BOUNDARY], what: Stories band off by one}
+      - {id: F5-561, items: [17], table: 561, flag: true, rules_any: [RANGE_GAP], what: Gap in Year Built (4-key matrix)}
+      - {id: F5-562, items: [27], table: 562, flag: true, rules_any: [RANGE_OVERLAP], what: Overlapping tenure tiers}
+      - {id: F5-563, items: [29], table: 563, flag: true, rules_any: [OFF_BY_ONE_BOUNDARY], what: MRD threshold shifted by one}
+      - {id: F5-564, items: [32], table: 564, flag: true, rules_any: [RANGE_GAP], what: Vehicle model-year gap}
+
+  - id: F6
+    group: failure
+    title: Same thing written differently, and genuine typos
+    catalog_items: [3, 21, 25, 33, 40, 42]
+    description: >
+      ILF limits written as $300,000 (should be fine) and as 300k (cannot be read safely); "Commercial"
+      in the approved file against code CMP_MONO in PolicyCenter; a code typo ccpl_ against ccp_;
+      "W/Application" against "W/Appliance"; ">= 100" against Min=100 with Max blank; and an
+      umbrella underlying-limit by line by state matrix that is correct.
+    tables: {570: ILF Limits Dollar Text, 571: ILF Limits Short Form, 572: Policy Type Split Matrix, 573: Class Prefix Factor, 574: Mitigation Discount Label, 575: Threshold Operator Format, 576: Umbrella Underlying Matrix}
+    runs:
+      - {name: with baseline, baseline: true, expected: {verdict: BLOCKED, exit: 2, rules: [NEEDS_MAPPING]}}
+    probes:
+      - {id: F6-570, items: [21], table: 570, flag: false, what: "$300,000 text is the same limit as 300000"}
+      - {id: F6-571, items: [21], table: 571, flag: true, rules_any: [UNPARSEABLE_VALUE, MISSING_ROW_IN_EXPORT, EXTRA_ROW_IN_EXPORT, NEEDS_MAPPING], max_findings: 3, what: "300k cannot be read safely - must be flagged, ideally once"}
+      - {id: F6-572, items: [3], table: 572, flag: true, rules_any: [MISSING_ROW_IN_EXPORT, EXTRA_ROW_IN_EXPORT, NEEDS_MAPPING], max_findings: 3, what: "Commercial against CMP_MONO - flagged, ideally once"}
+      - {id: F6-573, items: [42], table: 573, flag: true, rules_any: [MISSING_ROW_IN_EXPORT, EXTRA_ROW_IN_EXPORT], max_findings: 3, what: Code typo ccpl_ against ccp_}
+      - {id: F6-574, items: [25], table: 574, flag: true, rules_any: [MISSING_ROW_IN_EXPORT, EXTRA_ROW_IN_EXPORT], max_findings: 3, what: W/Application against W/Appliance}
+      - {id: F6-575, items: [40], table: 575, flag: true, rules_any: [NEEDS_MAPPING, MISSING_ROW_IN_EXPORT, EXTRA_ROW_IN_EXPORT], max_findings: 3, what: ">= 100 against Min=100 / Max blank - flagged, ideally once"}
+      - {id: F6-576, items: [33], table: 576, flag: false, what: Umbrella underlying-limit x line x state matrix correct}
+
+  - id: F7
+    group: failure
+    title: Scope - bypassed, deprecated and untargeted tables changed
+    catalog_items: [35, 36]
+    description: >
+      A table the story says DO NOT LOAD is changed; a table the story strikes through as deprecated is
+      updated; a table that is not in the story or approved file is changed. One correct update is
+      included as a control. Run once with a before-export and once without.
+    tables: {580: Bypassed Table, 581: Deprecated Legacy Factor, 582: Untargeted Table, 583: Declared Update Factor}
+    runs:
+      - {name: with baseline, baseline: true, expected: {verdict: FAIL, exit: 1, rules: [BYPASS_VIOLATION, UNDECLARED_CHANGE]}}
+      - {name: no baseline, baseline: false, limitation: 'D-031 + D-032', expected: {verdict: NEEDS_REVIEW, exit: 2, rules: [OUT_OF_SCOPE_TABLE_DATED]}}
+    probes:
+      - {id: F7-580a, items: [35], table: 580, run: with baseline, flag: true, rules_any: [BYPASS_VIOLATION], max_findings: 1, what: Bypassed table changed (with before-export)}
+      - {id: F7-581a, items: [36], table: 581, run: with baseline, flag: true, rules_any: [BYPASS_VIOLATION], max_findings: 1, what: Deprecated table updated (with before-export)}
+      - {id: F7-582a, items: [35], table: 582, run: with baseline, flag: true, rules_any: [UNDECLARED_CHANGE], max_findings: 2, what: Untargeted table changed (with before-export)}
+      - {id: F7-583a, items: [35], table: 583, run: with baseline, flag: false, what: Declared update loaded correctly}
+      - {id: F7-580b, limitation: D-031, items: [35], table: 580, run: no baseline, flag: true, what: Bypassed table changed (no before-export; date fallback)}
+      - {id: F7-581b, limitation: D-031, items: [36], table: 581, run: no baseline, flag: true, what: Deprecated table updated (no before-export; date fallback)}
+      - {id: F7-582b, limitation: D-032, items: [35], table: 582, run: no baseline, flag: true, rules_any: [OUT_OF_SCOPE_TABLE_DATED], what: Untargeted table carries the new date (no before-export)}
+      - {id: F7-583b, items: [35], table: 583, run: no baseline, flag: false, what: Declared update loaded correctly}
+
+  - id: F8
+    group: failure
+    title: Effective date and edition do not match the filing
+    catalog_items: [6, 44]
+    description: >
+      The export carries effective date 04/01/2027 while the story says 03/15/2027, and the edition
+      was never updated (still the old one, the story names the new one). A loss cost refresh table is
+      part of the change.
+    tables: {585: ISO Loss Cost Refresh}
+    runs:
+      - {name: with baseline, baseline: true, expected: {verdict: FAIL, exit: 1, rules: [EFFECTIVE_DATE_MISMATCH, EDITION_MISMATCH, EDITION_NOT_INCREMENTED]}}
+    probes:
+      - {id: F8-date, items: [44], table: null, flag: true, rules_any: [EFFECTIVE_DATE_MISMATCH], what: Export date differs from filing date}
+      - {id: F8-ed, items: [44], table: null, flag: true, rules_any: [EDITION_MISMATCH, EDITION_NOT_INCREMENTED], what: Edition not updated}
+      - {id: F8-585, items: [6], table: null, flag: true, rules_any: [EFFECTIVE_DATE_MISMATCH], what: Wrong date on the refreshed loss cost book is reported (once, book level)}
+
+  - id: F9
+    group: failure
+    title: State mirroring - Arizona values in a California export
+    catalog_items: [43]
+    description: >
+      The story, approved file and export are for California. Five exported tables contain Arizona's
+      values, one table is labelled Arizona, and one table is correct.
+    tables: {590: CA Base Rate, 591: CA Territory Factor, 592: CA Class Factor, 593: CA Deductible Factor, 594: CA Stories Factor, 595: CA Protection Factor, 596: CA Fire Credit}
+    runs:
+      - {name: with baseline, baseline: true, expected: {verdict: FAIL, exit: 1, rules: [VALUE_MISMATCH, SCOPE_METADATA_MISMATCH]}}
+    probes:
+      - {id: F9-590, items: [43], table: 590, flag: true, rules_any: [VALUE_MISMATCH], what: Arizona values in California base rate}
+      - {id: F9-591, items: [43], table: 591, flag: true, rules_any: [VALUE_MISMATCH], what: Arizona values in territory factor}
+      - {id: F9-592, items: [43], table: 592, flag: true, rules_any: [VALUE_MISMATCH], what: Arizona values in class factor}
+      - {id: F9-593, items: [43], table: 593, flag: true, rules_any: [VALUE_MISMATCH], what: Arizona values in deductible factor}
+      - {id: F9-594, items: [43], table: 594, flag: true, rules_any: [VALUE_MISMATCH], what: Arizona values in stories factor}
+      - {id: F9-595, items: [43], table: 595, flag: true, rules_any: [SCOPE_METADATA_MISMATCH], what: Table labelled Arizona inside a California book}
+      - {id: F9-596, items: [43], table: 596, flag: false, what: Correct California table}
+
+  - id: F10
+    group: failure
+    title: Scale - 30,000-row territory/ZIP table and census block table with 3 hidden errors
+    catalog_items: [14, 16]
+    description: >
+      A 30,000-row territory/ZIP table with one wrong factor and one missing row, and a census block
+      table with one decimal-shift error. The tool must find exactly these three and nothing else.
+    tables: {600: Territory ZIP Factor, 601: Census Block Factor Large}
+    runs:
+      - {name: with baseline, baseline: true, expected: {verdict: FAIL, exit: 1, rules: [VALUE_MISMATCH, MISSING_ROW_IN_EXPORT, ORDER_OF_MAGNITUDE], counts: {VALUE_MISMATCH: 1, MISSING_ROW_IN_EXPORT: 1, ORDER_OF_MAGNITUDE: 1}, max_total_findings: 3, max_runtime_s: 180}}
+    probes:
+      - {id: F10-600, items: [14], table: 600, flag: true, rules_all: [VALUE_MISMATCH, MISSING_ROW_IN_EXPORT], max_findings: 2, what: Two hidden errors in 30,000 rows}
+      - {id: F10-601, items: [16], table: 601, flag: true, rules_any: [ORDER_OF_MAGNITUDE], max_findings: 1, what: One hidden decimal shift in census blocks}
+
+  # ------------------------------------------------------------------ EDGE CASES
+  - id: E1
+    group: edge
+    title: Messy approved inputs
+    catalog_items: []
+    description: >
+      The approved file arrives as a .zip of separate workbooks. Inside: a tab with a messy name, merged
+      key cells, a struck-through row, a formula with no saved result, a #N/A cell, and a workbook with a
+      hidden sheet. PolicyCenter itself is correct.
+    tables: {610: Base Rate Messy Tab, 611: Merged Territory Matrix, 612: Struck Row Factor, 613: Formula Factor, 614: Error Cell Factor, 615: Hidden Sheet Host}
+    runs:
+      - {name: with baseline, baseline: true, expected: {verdict: BLOCKED, exit: 2, rules: [HIDDEN_SHEET, MERGED_KEY_FILLED, STRIKETHROUGH_ROW, FORMULA_NO_VALUE, EXCEL_ERROR]}}
+    probes:
+      - {id: E1-610, items: [], table: 610, flag: false, what: Messy tab name still maps to the right table}
+      - {id: E1-611, items: [], table: 611, flag: true, rules_any: [MERGED_KEY_FILLED], forbid: [VALUE_MISMATCH, MISSING_ROW_IN_EXPORT, EXTRA_ROW_IN_EXPORT], what: Merged key cells filled down correctly}
+      - {id: E1-612, items: [], table: 612, flag: true, rules_any: [STRIKETHROUGH_ROW], what: Struck-through row flagged for review}
+      - {id: E1-613, items: [], table: 613, flag: true, rules_any: [FORMULA_NO_VALUE], what: Formula without saved result}
+      - {id: E1-614, items: [], table: 614, flag: true, rules_any: [EXCEL_ERROR], what: "#N/A cell"}
+      - {id: E1-615, items: [], table: null, flag: true, rules_any: [HIDDEN_SHEET], what: Hidden sheet noticed}
+
+  - id: E1b
+    group: edge
+    title: Header-only approved table
+    catalog_items: []
+    description: >
+      One approved tab has headers but no data rows. The tool must refuse to verify rather than pass:
+      it should stop with a plain "empty tab" input message.
+    tables: {616: Header Only Table, 617: Normal Table Alongside}
+    runs:
+      - {name: with baseline, baseline: true, expected: {verdict: BLOCKED, exit: 3, rules: []}}
+    probes: []
+
+  - id: E2
+    group: edge
+    title: Jira story edge cases
+    catalog_items: []
+    description: >
+      A table listed both as an update and as DO NOT LOAD; "CA" used for both the state and the line
+      (Commercial Auto); two different filing dates; and an approved table the story never mentions.
+    tables: {620: Conflicted Action Table, 621: Approved Not In Story, 622: Plain Update Table}
+    runs:
+      - {name: with baseline, baseline: true, expected: {verdict: NEEDS_REVIEW, exit: 2, rules: [JIRA_CONFLICT, UNDOCUMENTED_APPROVED_TABLE], forbid: [APPROVED_FILE_MISSING_TABLE, SCOPE_METADATA_MISMATCH], jira: {lob: CA, states: [CA], review_flags_nonempty: true}}}
+    probes:
+      - {id: E2-620, items: [], table: 620, flag: true, rules_any: [JIRA_CONFLICT], what: Conflicting actions for one table}
+      - {id: E2-621, items: [], table: 621, flag: true, rules_any: [UNDOCUMENTED_APPROVED_TABLE], what: Approved table not in story}
+      - {id: E2-622, items: [], table: 622, flag: false, what: Plain declared update}
+
+  - id: E3
+    group: edge
+    title: Two tables with the same name but different numbers
+    catalog_items: []
+    description: >
+      The story says "Table 630 Deductible Factor". PolicyCenter holds two tables called Deductible Factor
+      (numbers 630 and 631) and the base book has a third, unnumbered one. Only 630 changed. The table number
+      should decide which one is meant.
+    tables: {630: Deductible Factor, 631: Deductible Factor}
+    runs:
+      - {name: with baseline, baseline: true, expected: {verdict: PASS, exit: 0, rules: [], forbid: [APPROVED_FILE_MISSING_TABLE, UNDOCUMENTED_APPROVED_TABLE, UNDECLARED_CHANGE]}}
+    probes:
+      - {id: E3-630, items: [], table: 630, flag: false, what: Table 630 loaded correctly and matched by its number}
+      - {id: E3-631, items: [], table: 631, flag: false, what: Same-named table 631 left alone}

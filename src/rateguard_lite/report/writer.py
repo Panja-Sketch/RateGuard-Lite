@@ -16,6 +16,7 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 from .. import __version__
+from ..engines.diagnose import Problem
 from ..model.findings import GATE_TEXT, LEVEL_LABEL, Finding, Verdict
 from ..plain import one_line, pretty_key, technical_details
 from ..tests_gen.must import FULL_LIST_LINE
@@ -57,9 +58,29 @@ def next_steps(findings: list[Finding]) -> list[str]:
     steps = []
     for (_rule, _), fs in sorted(groups.items(), key=lambda kv: kv[1][0].sort_key()):
         fx = fs[0].plain_action or fs[0].suggested_fix
+        if len(fs) > 1 and fs[0].rule_id in ("VALUE_MISMATCH", "ORDER_OF_MAGNITUDE", "TRANSPOSITION", "SIGN_FLIP"):
+            fx = f"Correct the {len(fs)} wrong values in PolicyCenter so they match the approved workbook, then export the rate book again."
         label = fs[0].table_name or fs[0].table_id
-        steps.append(f"{fx}{' (' + label + ')' if label else ''}{f' - {len(fs)} items' if len(fs) > 1 else ''}")
+        steps.append(f"{fx}{' (' + label + ')' if label else ''}{f' - {len(fs)} items' if len(fs) > 1 and not fx.startswith('Correct the') else ''}")
     return steps[:10]
+
+
+def problem_line(p: Problem) -> str:
+    label = LEVEL_LABEL.get(p.level, p.level.title())
+    extra = f" ({p.count} cells)" if p.count > 1 and p.headline.startswith("Table '") else ""
+    return f"[{label}] {p.headline}{extra}"
+
+
+def problem_details(p: Problem, indent: str = "     ") -> list[str]:
+    f = p.findings[0]
+    out = []
+    if p.likely_cause:
+        out.append(f"{indent}Likely cause: {p.likely_cause}")
+    if f.plain_why:
+        out.append(f"{indent}Why it matters: {f.plain_why}")
+    if f.plain_action:
+        out.append(f"{indent}What to do: {f.plain_action}")
+    return out
 
 
 def must_lines(r: RunResult, n: int = 12, full: bool = True) -> list[str]:
@@ -82,28 +103,33 @@ def verdict_text(r: RunResult, width: int = 100) -> str:
     gate = GATE_TEXT[r.verdict]
     lines = [
         f"RATEGUARD-LITE VERDICT: {r.verdict.value.replace('_', ' ')} — {gate}",
+        *([s["headline"]] if s.get("headline") else []),
         f"Ticket: {s['ticket'] or '-'} | LOB: {s['lob'] or '-'} | State: {','.join(s['states']) or '-'} | Filing effective: {s['filing_effective_date'] or '-'}",
         f"Rate book: {s['rate_book'] or '-'} | Export edition: {s['export_edition'] or '-'} | Baseline: {s['baseline']}",
         f"Tables: {s['tables_analyzed']} analyzed | {s['tables_matched']} matched | {s['tables_with_discrepancies']} with discrepancies | {s['scope_violations']} scope violation(s)",
         f"Cells: {s['cells_compared']:,} compared | {s['critical']} critical | {s['high']} high | {s['warnings']} warnings | {s['rounded_matches']} rounded matches",
         s["scope_check"],
+        *([s["bypass_note"]] if s.get("bypass_note") else []),
     ]
     if r.tolerance_notes:
         lines.append("Tolerance overrides: " + "; ".join(r.tolerance_notes))
-    block = [f for f in r.findings if f.level in BLOCKING]
-    review = [f for f in r.findings if f.level in ("NEEDS_REVIEW", "NOT_EVALUATED")]
+    block = [p for p in r.problems if p.level in BLOCKING]
+    review = [p for p in r.problems if p.level == "NEEDS_REVIEW"]
+    review_f = [f for f in r.findings if f.level == "NOT_EVALUATED"]
     if block:
         lines.append("WHAT NEEDS FIXING")
-        for f in block[:15]:
-            lines += [" " + line_for(f)] + detail_lines(f)
+        for p in block[:15]:
+            lines += [" " + problem_line(p)] + problem_details(p)
         if len(block) > 15:
             lines.append(f" ... and {len(block) - 15} more (see reconciliation_report.xlsx)")
-    if review:
+    if review or review_f:
         lines.append("PLEASE HAVE A LOOK")
-        for f in review[:8]:
+        for p in review[:8]:
+            lines += [" " + problem_line(p)] + problem_details(p)
+        for f in review_f[: max(0, 8 - len(review))]:
             lines += [" " + line_for(f)] + detail_lines(f)
-        if len(review) > 8:
-            lines.append(f" ... and {len(review) - 8} more")
+        if len(review) + len(review_f) > 8:
+            lines.append(f" ... and {len(review) + len(review_f) - 8} more")
     steps = next_steps(r.findings)
     if steps:
         lines.append("NEXT STEPS")
@@ -122,12 +148,14 @@ def jira_comment(r: RunResult) -> str:
            f"Rate book {s['rate_book'] or '-'} edition {s['export_edition'] or '-'}, filing effective {s['filing_effective_date'] or '-'}.",
            f"Tables: {s['tables_analyzed']} analyzed, {s['tables_matched']} matched, {s['tables_with_discrepancies']} with discrepancies, "
            f"{s['scope_violations']} scope violation(s). Cells compared: {s['cells_compared']:,}.",
-           f"Baseline: {s['baseline']}.", s["scope_check"]]
-    block = [f for f in r.findings if f.level in BLOCKING]
+           f"Baseline: {s['baseline']}.", s["scope_check"], *([s["bypass_note"]] if s.get("bypass_note") else [])]
+    if s.get("headline"):
+        out.insert(1, s["headline"])
+    block = [p for p in r.problems if p.level in BLOCKING]
     if block:
         out.append("")
         out.append("What needs fixing:")
-        out += ["* " + f"{f.plain_what or f.message} {f.plain_action}".strip() for f in block[:10]]
+        out += ["* " + f"{problem_line(p)} {('Likely cause: ' + p.likely_cause + ' ') if p.likely_cause else ''}{p.findings[0].plain_action}".strip() for p in block[:10]]
         if len(block) > 10:
             out.append(f"* ... and {len(block) - 10} more")
     lim = [f for f in r.findings if f.level == "NOT_EVALUATED"]
@@ -207,6 +235,9 @@ def write_xlsx(r: RunResult, path: Path) -> None:
         _put(ws, i, 2, v)
     ws.column_dimensions["A"].width = 28
     ws.column_dimensions["B"].width = 90
+    _sheet(wb, "Problems by table", ["Level", "Table", "Cells", "What we found", "Likely cause", "What to do"],
+           [[LEVEL_LABEL.get(p.level, p.level), p.table_name or p.table_id or "-", p.count, p.headline, p.likely_cause, p.findings[0].plain_action] for p in r.problems],
+           [14, 34, 8, 70, 70, 60], level_col=1)
     _sheet(wb, "Discrepancies", FIND_HEAD, [_finding_row(f) for f in r.findings if f.level != "INFO"], FIND_W, level_col=1)
     _sheet(wb, "Scope Audit", ["Table ID", "Table", "In Jira (action)", "In approved", "In export", "Changed vs baseline", "Mapping", "Status"],
            [[x["table_id"], x["table"], x["in_jira"], x["in_approved"], x["in_export"], x["changed_vs_baseline"], x["mapping"], x["status"]] for x in r.scope],
@@ -271,7 +302,8 @@ def _csv_safe(v: str) -> str:
 # ---------------------------------------------------------------- html
 HOW_TO_READ = (
     "The big banner is the overall answer.",
-    "Each item under Findings says what we found, why it matters and what to do. Click a row to open it.",
+    "Problems by table groups everything found in one table into one item, with a count and the likely cause. Click an item to see its rows.",
+    "Each row under All findings says what we found, why it matters and what to do. Click a row to open it.",
     "Technical details (rule, raw values, cell locations) are folded away inside each item.",
     "The Must Test tab lists the few quotes worth running by hand. Values in the tables are already checked cell by cell.",
     "Nothing leaves this computer. This report checks rate table contents, not rating logic.",
@@ -287,7 +319,7 @@ def write_html(r: RunResult, path: Path) -> None:
     html = tpl.render(
         r=r, s=s, gate=GATE_TEXT[r.verdict], verdict=r.verdict.value, vclass=r.verdict.value.lower(), version=__version__,
         must=list(getattr(r.tests, "must", [])), full_list_line=FULL_LIST_LINE, tech=technical_details, labels=LEVEL_LABEL, pretty_key=pretty_key, how_to_read=HOW_TO_READ,
-        findings=[f for f in r.findings], levels=levels, steps=next_steps(r.findings), scope=r.scope, mapping=rep.mapping,
+        findings=[f for f in r.findings], problems=r.problems, levels=levels, steps=next_steps(r.findings), scope=r.scope, mapping=rep.mapping,
         inputs=r.inputs, tests=r.tests, warnings=r.warnings, info=r.info, ref_text=ref_text,
         level_order=["BLOCKER", "CRITICAL", "HIGH", "NEEDS_MAPPING", "NEEDS_REVIEW", "NOT_EVALUATED", "WARNING", "INFO"],
     )

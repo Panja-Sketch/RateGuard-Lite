@@ -31,7 +31,8 @@ The plain-language text shown in reports lives in `config/messages.yaml`.
 | `UNDOCUMENTED_APPROVED_TABLE` | WARNING | Approved table not mentioned in Jira. |
 | `APPROVED_ROW_UNCHANGED` | INFO | Approved equals baseline (stale approved file?). |
 | `NOT_EVALUATED_NO_BASELINE` | NOT_EVALUATED | No baseline; scope checks skipped. Only raised when `verdict.require_baseline_for_pass` is true; otherwise the reports carry the line "Scope check (tables outside approved/Jira): not performed – no baseline provided" and the run can PASS. |
-| `OUT_OF_SCOPE_TABLE_DATED` | NEEDS_REVIEW | An export table outside the approved file and Jira carries the filing effective date or the export's new edition in its own metadata. Skipped (noted in `run_manifest.json`) when the export has no per-table dates or every table has the same stamp. |
+| `OUT_OF_SCOPE_TABLE_DATED` | NEEDS_REVIEW | **Disabled by default (D-032; `scope.oos_enabled`).** An export table outside the approved file and Jira carries the filing effective date or the export's new edition in its own metadata. With a baseline only tables that changed against it are flagged. Skipped (noted in `run_manifest.json`) when the export has no per-table dates or the stamp is carried by more than `scope.oos_max_stamp_share` (30%) of the tables (D-031). |
+| `BYPASS_NOT_CHECKED` | INFO | No baseline and the story marks tables DO NOT LOAD: we cannot tell whether they changed. Shown once as a note; never changes the verdict (D-031). |
 
 ## Mapping and review
 | Rule | Level | Meaning |
@@ -58,7 +59,7 @@ The plain-language text shown in reports lives in `config/messages.yaml`.
 |---|---|---|
 | `EFFECTIVE_DATE_MISMATCH` | CRITICAL (export) / WARNING (approved info sheet) | Date differs from the Jira filing date. |
 | `EFFECTIVE_DATE_NOT_EVALUATED` | NOT_EVALUATED | Jira or export has no usable date. |
-| `SCOPE_METADATA_MISMATCH` | HIGH | Jurisdiction or LOB differs from Jira. |
+| `SCOPE_METADATA_MISMATCH` | HIGH | Jurisdiction or LOB differs from Jira. One finding per table when only some tables carry a different state label (D-029). |
 | `EDITION_MISMATCH` | HIGH | Edition differs from the one named in Jira. |
 | `EDITION_NOT_INCREMENTED` | WARNING (configurable HIGH) | Same edition as the baseline despite changes. |
 
@@ -71,6 +72,10 @@ The plain-language text shown in reports lives in `config/messages.yaml`.
 | `HIDDEN_ROW`, `HIDDEN_COL`, `MERGED_KEY_FILLED`, `POSSIBLE_LEADING_ZERO_LOSS`, `DATE_HAS_TIME`, `PERCENT_SIGN_IGNORED` | WARNING | Formatting quirks that may hide data. |
 | `FORMULA_CACHED`, `TABLE_NOTE`, `VBA_PRESENT`, `INPUT_INFO` | INFO | Informational. |
 | `INPUT_WARNING`, `HIDDEN_SHEET` | WARNING | External links/OLE found; hidden sheet not used. |
+
+## Grouped problems (D-030)
+
+Reports also show every problem-level finding grouped per table: a count, a plain headline and a likely cause. The findings themselves are unchanged. Likely causes: the change was not loaded (values equal the 'before' export), columns swapped or copied, values copied from another table, the whole table differs, rows written differently (format, label or code), a typo in a label, or "values differ" when no pattern is strong.
 
 ## Must Test list (D-026)
 

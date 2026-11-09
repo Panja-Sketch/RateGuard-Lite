@@ -1,0 +1,89 @@
+# Gap analysis - analysis of what the tool did, NOT part of the expectations in cases.yaml.
+# Updated after the batch-fix phase (D-029..D-031). Resolved items moved to "resolved".
+# klass: tool_gap | expectation_off     severity: high | medium | low
+
+F7-580b:
+  klass: limitation
+  severity: medium
+  title: Changing a "DO NOT LOAD" table is still not detected when no before-export is supplied
+  plain: >
+    With a before-export the tool flags it. Without one it cannot know. Since D-031 the report says so once, in plain words
+    ("We can't tell whether tables marked DO NOT LOAD were changed without a 'before' export. Check them manually or supply --baseline.").
+    This is an accepted limitation: no detection guess was added, as decided.
+  cause: Nothing in the files shows whether a bypassed table changed; the date fallback never looked at tables the story mentions.
+  fix: Supply --baseline (or check by hand). Optional later - extend the date/edition fallback to bypassed tables (specification section 2).
+F7-581b:
+  klass: limitation
+  severity: medium
+  title: Updating a struck-through (deprecated) table is still not detected when no before-export is supplied
+  plain: Same limitation as the bypassed table, same one-time note in the report.
+  cause: Struck-through tables are treated as bypass.
+  fix: See F7-580b.
+F7-582b:
+  klass: limitation
+  severity: medium
+  title: "Documented limitation (D-032): an untargeted table that carries the new date is not flagged without a before-export"
+  plain: >
+    Product decision D-032: the check OUT_OF_SCOPE_TABLE_DATED is switched off by default. The book-level date and edition are the majority stamp, so a stamp shared by most tables can never single out
+    one table and the check was nearly dormant. With a before-export the change is caught by the baseline comparison (see F7-582a). The expectation in cases.yaml is deliberately unchanged;
+    this is a decided limitation, not a tweak to match behaviour. The check can be switched back on with scope.oos_enabled (profile oos_stamp_wide).
+  cause: "Product decision D-032 (the check is disabled by default; it was nearly dormant after D-031)."
+  fix: "None planned. Supply --baseline to cover tables outside the change; or enable scope.oos_enabled."
+
+run:F7:no baseline:
+  derived: true
+  klass: limitation
+  severity: medium
+  title: "F7: without a before-export the result is PASS; the specification expects NEEDS_REVIEW (documented limitation D-031/D-032)"
+  plain: See F7-582b.
+  cause: See F7-582b.
+  fix: See F7-582b.
+
+extra:
+  - id: obs-575-message
+    case: F6
+    kind: Observation
+    klass: tool_gap
+    severity: low
+    items: [40]
+    title: ">= 100 against Min=100 / Max blank is caught once, but the explanation points at the wrong thing"
+    plain: >
+      The message says it could not match the table to PolicyCenter, but the tab name and number match; the real difference is one "Policy Count" column against Min and Max columns.
+    cause: Column-set differences are reported with the generic "could not match table" text.
+    fix: Say "the columns differ - approved has Policy Count; PolicyCenter has Count Min and Count Max" and mention that ">= N" can be read as Min = N, Max blank.
+  - id: obs-jira-name
+    case: E2
+    kind: Observation
+    klass: tool_gap
+    severity: low
+    items: []
+    title: Action words inside a table name are removed from the Jira table name
+    plain: >
+      "Table 622 Plain Update Table" is read as table 622 named "Plain Table". The number still identifies the table, so nothing went wrong, but a name made mostly of an action word could be misread.
+    cause: The Jira parser strips action keywords (UPDATE, ADD, REMOVE...) from the whole line, including the table name.
+    fix: Strip action words only from the part of the line outside the table name.
+  - id: obs-groups-ui
+    case: E1
+    kind: Observation
+    klass: tool_gap
+    severity: low
+    items: []
+    title: The local UI still lists findings one by one
+    plain: The grouped "Problems by table" view is in the HTML report, Excel, JSON, the verdict file and the Jira comment, but not yet in the Streamlit UI.
+    cause: The UI was out of scope for this batch.
+    fix: Render RunResult.problems in the UI findings tab.
+
+resolved:
+  - {id: obs-oos-dormant, fixed_in: D-032, title: 'The nearly dormant date check is now disabled by default (decision D-032); Engine B covers the baseline case'}
+  - {id: F9-595, fixed_in: D-029, title: A table labelled for the wrong state inside the book is now reported, one finding per table}
+  - {id: E3-630, fixed_in: D-029, title: Same-named tables - the story's table number now decides}
+  - {id: obs-messy-tab-names, fixed_in: D-029, title: 'Tabs such as "TAB 701 - Roofing Surcharge" or "Copy of 703 ..." are now matched'}
+  - {id: obs-cascade, fixed_in: D-029, title: One unmatched tab is one finding, not three}
+  - {id: F6-571, fixed_in: D-030, title: '100k / 300k / 1M - one grouped item: the same rows are written differently'}
+  - {id: F6-572, fixed_in: D-030, title: 'Commercial vs CMP_MONO - one grouped item with the right likely cause'}
+  - {id: obs-mirror-rollup, fixed_in: D-030, title: 'Wrong-state tables show one item per table: every row differs'}
+  - {id: H4-517, fixed_in: D-031, title: Leading-zero warning no longer raised for protection class 1-10}
+  - {id: E1b, fixed_in: D-031, title: A header-only tab gives one plain input error (exit 3)}
+  - {id: obs-oos-noise, fixed_in: D-031, title: '52 "date matches this filing" review items with a baseline are gone'}
+  - {id: obs-formula-double, fixed_in: D-031, title: A formula without a saved result is reported once, with advice that names the approved file}
+  - {id: obs-input-warning, fixed_in: D-031, title: The hidden-sheet warning is shown once}

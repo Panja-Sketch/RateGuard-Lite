@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RateGuard-Lite — PC-12345 FAIL</title>
+<style>
+:root{
+  --bg:#f4f6f9; --surface:#ffffff; --ink:#0b1f3a; --muted:#5b6b82; --line:#dfe5ee; --brand:#0b1f3a; --accent:#0e9aa7;
+  --pass:#067647; --pass-bg:#e7f6ee; --warn:#b54708; --warn-bg:#fff4e5; --fail:#b42318; --fail-bg:#fdecea;
+  --review:#5b3fd1; --review-bg:#efebfd; --block:#7f1d1d; --block-bg:#f9e3e3; --info:#475467; --info-bg:#eef1f5;
+  --shadow:0 1px 2px rgba(11,31,58,.06),0 4px 16px rgba(11,31,58,.05);
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#0a1424; --surface:#111d33; --ink:#e8eef8; --muted:#93a4bf; --line:#22324d; --brand:#0a1424; --accent:#35c3d1;
+  --pass:#47d18c; --pass-bg:#0f2e22; --warn:#f6a860; --warn-bg:#33230f; --fail:#ff8a7d; --fail-bg:#3a1714;
+  --review:#b7a6ff; --review-bg:#241d4d; --block:#ff9d9d; --block-bg:#3a1414; --info:#a9b6c9; --info-bg:#1a2842;
+  --shadow:none;}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+header.top{background:var(--brand);color:#fff;padding:14px 28px;display:flex;align-items:center;gap:14px}
+header.top svg{flex:none}
+header.top .name{font-weight:700;letter-spacing:.2px;font-size:16px}
+header.top .name span{color:#7ee0ea;font-weight:500}
+header.top .run{margin-left:auto;font-size:12px;opacity:.75;text-align:right}
+main{max-width:1280px;margin:0 auto;padding:24px 28px 56px}
+.hero{background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:22px 26px;display:flex;gap:24px;align-items:center;flex-wrap:wrap;border-left:8px solid var(--info)}
+.hero.pass{border-left-color:var(--pass)} .hero.pass_with_warnings,.hero.pass_with_limitations{border-left-color:var(--warn)}
+.hero.fail{border-left-color:var(--fail)} .hero.needs_review{border-left-color:var(--review)} .hero.blocked{border-left-color:var(--block)}
+.chip{display:inline-block;padding:3px 10px;border-radius:999px;font-weight:700;font-size:12px;letter-spacing:.4px;white-space:nowrap}
+.chip.v{font-size:15px;padding:6px 16px}
+.pass .chip.v,.chip.l-PASS{background:var(--pass-bg);color:var(--pass)}
+.pass_with_warnings .chip.v,.pass_with_limitations .chip.v{background:var(--warn-bg);color:var(--warn)}
+.fail .chip.v{background:var(--fail-bg);color:var(--fail)} .needs_review .chip.v{background:var(--review-bg);color:var(--review)}
+.blocked .chip.v{background:var(--block-bg);color:var(--block)}
+.l-BLOCKER{background:var(--block-bg);color:var(--block)} .l-CRITICAL{background:var(--fail-bg);color:var(--fail)}
+.l-HIGH{background:var(--warn-bg);color:var(--warn)} .l-NEEDS_MAPPING,.l-NEEDS_REVIEW{background:var(--review-bg);color:var(--review)}
+.l-NOT_EVALUATED{background:var(--info-bg);color:var(--info)} .l-WARNING{background:var(--warn-bg);color:var(--warn)} .l-INFO{background:var(--info-bg);color:var(--info)}
+.hero h1{margin:0 0 4px;font-size:22px} .hero .gate{font-size:16px;color:var(--muted)}
+.meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:6px 28px;margin-left:auto;font-size:13px}
+.meta b{color:var(--muted);font-weight:600;display:block;font-size:11px;text-transform:uppercase;letter-spacing:.5px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;margin:18px 0}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px;box-shadow:var(--shadow)}
+.kpi .n{font-size:26px;font-weight:700;line-height:1.1} .kpi .t{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.5px}
+.kpi.bad .n{color:var(--fail)} .kpi.good .n{color:var(--pass)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:18px 22px;margin-bottom:18px}
+.card h2{margin:0 0 10px;font-size:15px}
+.steps{margin:0;padding-left:20px} .steps li{margin:4px 0}
+nav.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:22px 0 14px;flex-wrap:wrap}
+nav.tabs button{background:none;border:0;color:var(--muted);padding:10px 16px;font:inherit;font-weight:600;cursor:pointer;border-bottom:3px solid transparent}
+nav.tabs button.on{color:var(--ink);border-bottom-color:var(--accent)}
+.pane{display:none} .pane.on{display:block}
+.filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.filters button{border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:4px 12px;font:inherit;font-size:12px;cursor:pointer}
+.filters button.on{background:var(--brand);color:#fff;border-color:var(--brand)}
+.filters input{margin-left:auto;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:8px;padding:6px 12px;min-width:240px;font:inherit}
+table{width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden;font-size:13px}
+th{background:var(--bg);text-align:left;padding:8px 10px;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--line);position:sticky;top:0}
+td{padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+tr.f{cursor:pointer} tr.f:hover td{background:var(--bg)}
+details.tech{margin-top:6px} details.tech summary{cursor:pointer;color:var(--muted);font-size:12px} details.tech .mono{margin-top:4px;word-break:break-word}
+.prob{margin:10px 0;padding:12px 16px} .prob summary{cursor:pointer;list-style:none} .prob .cause{margin-top:4px;color:var(--muted)} .prob ul.rows{margin:6px 0 0;padding-left:20px;font-size:13px}
+.howto ul{margin:6px 0 0;padding-left:20px} .howto li{margin:2px 0}
+tr.d td{background:var(--bg);color:var(--muted);font-size:12.5px} tr.d{display:none} tr.d.open{display:table-row}
+.mono{font-family:ui-monospace,Consolas,Menlo,monospace;font-size:12px}
+.muted{color:var(--muted)} .empty{padding:26px;text-align:center;color:var(--muted)}
+.scroll{overflow-x:auto}
+footer{margin-top:30px;color:var(--muted);font-size:12px;text-align:center}
+@media (max-width:700px){main{padding:16px}.meta{margin-left:0}header.top{padding:12px 16px}}
+@media print{nav.tabs,.filters{display:none}.pane{display:block!important}}
+</style>
+</head>
+<body>
+<header class="top">
+  <svg width="30" height="34" viewBox="0 0 30 34" aria-hidden="true"><path d="M15 1 3 6v9c0 8.2 5 15.2 12 18 7-2.800 12-9.800 12-18V6z" fill="none" stroke="#7ee0ea" stroke-width="2"/><path d="M9 17.500 13.500 22 21.500 12" fill="none" stroke="#fff" stroke-width="2.600" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <div class="name">RateGuard<span>·Lite</span></div>
+  <div class="run">Run R-20261108-224300-2a77<br>v1.1.0 · config dd50e1083a657509</div>
+</header>
+<main>
+  <section class="hero fail">
+    <div>
+      <span class="chip v">FAIL</span>
+      <h1>PC-12345</h1>
+      <div class="gate">Some values in PolicyCenter don&#39;t match what was approved. Fix these before QA.</div>
+      <div class="gate"><b>1 table has problems (1 cell).</b></div>
+    </div>
+    <div class="meta">
+      <div><b>Line / State</b>BOP / OR</div>
+      <div><b>Filing effective</b>2027-03-15</div>
+      <div><b>Rate book</b>BOPByPeril_OR_RateBook</div>
+      <div><b>Export edition</b>2025-V2</div>
+      <div><b>Baseline</b>provided (baseline.xlsx, edition 2025-V1)</div>
+      <div><b>Scope check</b>We also checked tables outside this change against the &#39;before&#39; export: provided (baseline.xlsx, edition 2025-V1).</div>
+    </div>
+  </section>
+
+  <section class="card howto"><h2>How to read this report</h2><ul><li>The big banner is the overall answer.</li><li>Problems by table groups everything found in one table into one item, with a count and the likely cause. Click an item to see its rows.</li><li>Each row under All findings says what we found, why it matters and what to do. Click a row to open it.</li><li>Technical details (rule, raw values, cell locations) are folded away inside each item.</li><li>The Must Test tab lists the few quotes worth running by hand. Values in the tables are already checked cell by cell.</li><li>Nothing leaves this computer. This report checks rate table contents, not rating logic.</li></ul></section>
+
+  <section class="kpis">
+    <div class="kpi"><div class="n">8</div><div class="t">Tables analyzed</div></div>
+    <div class="kpi good"><div class="n">7</div><div class="t">Matched cleanly</div></div>
+    <div class="kpi bad"><div class="n">1</div><div class="t">With discrepancies</div></div>
+    <div class="kpi "><div class="n">0</div><div class="t">Scope violations</div></div>
+    <div class="kpi"><div class="n">89</div><div class="t">Cells compared</div></div>
+    <div class="kpi"><div class="n">0</div><div class="t">Rounded matches</div></div>
+  </section>
+
+  
+  <section class="card"><h2>Next steps</h2><ol class="steps"><li>Change the value in PolicyCenter to 1.045 and export the rate book again. (121 BLD Number of Stories)</li></ol></section>
+  
+
+  <nav class="tabs" role="tablist">
+    <button class="on" data-pane="p-prob">Problems by table (1)</button>
+    <button data-pane="p-find">All findings (1)</button>
+    <button data-pane="p-scope">Scope audit (8)</button>
+    <button data-pane="p-map">Mapping (8)</button>
+    <button data-pane="p-tests">Must Test (8)</button>
+    <button data-pane="p-in">Inputs &amp; notes</button>
+  </nav>
+
+  <div id="p-prob" class="pane on">
+    
+    <details class="card prob">
+      <summary><span class="chip l-CRITICAL">Critical</span> <b>121 BLD Number of Stories</b>
+        <span class="muted">1 item</span><div>Table &#39;121 BLD Number of Stories&#39; (4 to 6 stories): the Stories Factor value in PolicyCenter is not the approved value. Approved 1.045, PolicyCenter has 1.025 (1.9% lower).</div>
+        </summary>
+      <div><b>Why it matters:</b> Policies with 4 to 6 stories will be undercharged.</div>
+      <div><b>What to do:</b> Change the value in PolicyCenter to 1.045 and export the rate book again.</div>
+      
+      <details class="tech"><summary>Technical details</summary><div class="mono">Rule: VALUE_MISMATCH | Table ID: BOP:121 | Key: Stories From=4, Stories To=6 | Column: Stories Factor | Approved value: 1.045; export value: 1.025 | Approved cell: approved.xlsx!121 BLD Number of Stories!C6 | Export cell: export.xlsx!BOP_BLD_NumStories_Ext!C11 | Detail: approved 1.045 vs export 1.025 (-1.91%) | delta: -0.02 | pct: -1.91%<br></div></details>
+    </details>
+    
+    
+  </div>
+
+  <div id="p-find" class="pane">
+    <div class="filters" id="lvlfilters">
+      <button class="on" data-lvl="ALL">All</button>
+      <button data-lvl="CRITICAL">Critical · 1</button>
+      <input type="search" id="q" placeholder="Filter by table, value or words...">
+    </div>
+    <div class="scroll"><table id="ft"><thead><tr><th>Level</th><th>Table</th><th>Where in the table</th><th>What we found</th></tr></thead><tbody>
+      
+      <tr class="f" data-lvl="CRITICAL">
+        <td><span class="chip l-CRITICAL">Critical</span></td>
+        <td>121 BLD Number of Stories</td><td>4 to 6 stories</td>
+        <td>Table &#39;121 BLD Number of Stories&#39; (4 to 6 stories): the Stories Factor value in PolicyCenter is not the approved value. Approved 1.045, PolicyCenter has 1.025 (1.9% lower).</td>
+      </tr>
+      <tr class="d" data-lvl="CRITICAL"><td colspan="4">
+        <div><b>Why it matters:</b> Policies with 4 to 6 stories will be undercharged.</div>
+        <div><b>What to do:</b> Change the value in PolicyCenter to 1.045 and export the rate book again.</div>
+        
+        <details class="tech"><summary>Technical details</summary><div class="mono">Rule: VALUE_MISMATCH | Table ID: BOP:121 | Key: Stories From=4, Stories To=6 | Column: Stories Factor | Approved value: 1.045; export value: 1.025 | Approved cell: approved.xlsx!121 BLD Number of Stories!C6 | Export cell: export.xlsx!BOP_BLD_NumStories_Ext!C11 | Detail: approved 1.045 vs export 1.025 (-1.91%) | delta: -0.02 | pct: -1.91%</div></details>
+      </td></tr>
+      
+    </tbody></table></div>
+    
+  </div>
+
+  <div id="p-scope" class="pane"><div class="scroll"><table><thead><tr><th>Table</th><th>In Jira</th><th>In approved</th><th>In export</th><th>Changed vs baseline</th><th>Mapping</th><th>Status</th></tr></thead><tbody>
+    <tr><td>1 BLD Base Rate <span class="muted mono">BOP:1</span></td><td>MODIFY</td><td>yes</td><td>yes</td><td>yes</td><td>CONFIRMED</td><td>CHANGED_DECLARED</td></tr><tr><td>10 Vandalism Exclusion <span class="muted mono">BOP:10</span></td><td>ADD</td><td>yes</td><td>yes</td><td>yes</td><td>CONFIRMED</td><td>CHANGED_DECLARED</td></tr><tr><td>121 BLD Number of Stories <span class="muted mono">BOP:121</span></td><td>MODIFY</td><td>yes</td><td>yes</td><td>yes</td><td>CONFIRMED</td><td>CRITICAL</td></tr><tr><td>21 BPP Base Rate <span class="muted mono">BOP:21</span></td><td>MODIFY</td><td>yes</td><td>yes</td><td>yes</td><td>CONFIRMED</td><td>CHANGED_DECLARED</td></tr><tr><td>42 GL Class Code Factor <span class="muted mono">BOP:42</span></td><td>MODIFY</td><td>yes</td><td>yes</td><td>yes</td><td>CONFIRMED</td><td>CHANGED_DECLARED</td></tr><tr><td>48 EPLI Coverage <span class="muted mono">BOP:48</span></td><td>BYPASS</td><td>yes</td><td>yes</td><td>no</td><td>CONFIRMED</td><td>UNCHANGED</td></tr><tr><td>Deductible Factor <span class="muted mono">BOP:DEDUCTIBLE_FACTOR</span></td><td>MODIFY</td><td>yes</td><td>yes</td><td>yes</td><td>CONFIRMED</td><td>CHANGED_DECLARED</td></tr><tr><td>Territory Factor <span class="muted mono">BOP:TERRITORY_FACTOR</span></td><td>MODIFY</td><td>yes</td><td>yes</td><td>yes</td><td>CONFIRMED</td><td>CHANGED_DECLARED</td></tr>
+  </tbody></table></div></div>
+
+  <div id="p-map" class="pane"><div class="scroll"><table><thead><tr><th>Table</th><th>Approved sheet</th><th>Export table</th><th>Confidence</th><th>Score</th><th>Why</th></tr></thead><tbody>
+    <tr><td>1 BLD Base Rate</td><td>approved.xlsx!1 BLD Base Rate</td><td>1 BLD Base Rate</td><td>CONFIRMED</td><td>0.55</td><td>number+name</td></tr><tr><td>10 Vandalism Exclusion</td><td>approved.xlsx!10 Vandalism Exclusion</td><td>10 Vandalism Exclusion</td><td>CONFIRMED</td><td>0.55</td><td>number+name</td></tr><tr><td>121 BLD Number of Stories</td><td>approved.xlsx!121 BLD Number of Stories</td><td>121 BLD Number of Stories</td><td>CONFIRMED</td><td>0.55</td><td>number+name</td></tr><tr><td>21 BPP Base Rate</td><td>approved.xlsx!21 BPP Base Rate</td><td>21 BPP Base Rate</td><td>CONFIRMED</td><td>0.55</td><td>number+name</td></tr><tr><td>42 GL Class Code Factor</td><td>approved.xlsx!42 GL Class Code Factor</td><td>42 GL Class Code Factor</td><td>CONFIRMED</td><td>0.55</td><td>number+name</td></tr><tr><td>48 EPLI Coverage</td><td>approved.xlsx!48 EPLI Coverage</td><td>48 EPLI Coverage</td><td>CONFIRMED</td><td>0.4</td><td>number+name</td></tr><tr><td>Deductible Factor</td><td>approved.xlsx!Deductible Factor</td><td>Deductible Factor</td><td>CONFIRMED</td><td>0.35</td><td>identical name</td></tr><tr><td>Territory Factor</td><td>approved.xlsx!Territory Factor</td><td>Territory Factor</td><td>CONFIRMED</td><td>0.35</td><td>identical name</td></tr>
+  </tbody></table></div></div>
+
+  <div id="p-tests" class="pane">
+    
+    <div class="card"><h2>Must Test: the quotes worth running by hand</h2>
+      <p class="muted">Every table value is already compared cell by cell. These tests cover what a file comparison cannot prove, most important first.</p>
+      <div class="scroll"><table><thead><tr><th>#</th><th>What to test</th><th>Why this matters</th><th>How to set up the quote</th><th>What you should see</th><th>Source</th><th>Type</th></tr></thead><tbody>
+      <tr><td>1</td><td>After the fix, quote the exact row that was wrong in 121 BLD Number of Stories.<div class="muted mono">MT-5934665B</div></td><td>This proves the specific mismatch is fixed, not just that the table loads.</td><td>Stories = 4</td><td>In the rating worksheet, the Stories Factor for 121 BLD Number of Stories should be 1.045.</td><td>This run: approved.xlsx, tab 121 BLD Number of Stories, cell C6</td><td class="mono">C10</td></tr><tr><td>2</td><td>Quote on the filing date using the changed 121 BLD Number of Stories table.<div class="muted mono">MT-2A6AECA4</div></td><td>One quote proves the new rate book starts on the right day and that the changed table is used in rating.</td><td>New business, effective 3/15/2027; Stories = 1.</td><td>The rating worksheet should use the new rates (rate book 2025-V2). Also, the Stories Factor for 121 BLD Number of Stories should be 1.01. It changed by 1.0% in this filing.</td><td>Jira PC-12345: Filing Effective Date 3/15/2027; Approved file approved.xlsx, tab 121 BLD Number of Stories, cell A2</td><td class="mono">C1+C6</td></tr><tr><td>3</td><td>Quote a new business policy effective the day before the filing date.<div class="muted mono">MT-16ABB2DC</div></td><td>If the date rule is wrong, quotes on the wrong side of the filing date are over- or undercharged.</td><td>New business, effective 3/14/2027.</td><td>The rating worksheet should use the old rates (rate book 2025-V1).</td><td>Jira PC-12345: Filing Effective Date 3/15/2027</td><td class="mono">C1</td></tr><tr><td>4</td><td>Renew a policy with an effective date on or after the filing date.<div class="muted mono">MT-5B9D01AC</div></td><td>Renewals must pick up the new rates, and they often follow a different date path than new business.</td><td>Renewal, effective 5/15/2027.</td><td>The rating worksheet should use the new rates (rate book 2025-V2).</td><td>Jira PC-12345: Filing Effective Date 3/15/2027</td><td class="mono">C2</td></tr><tr><td>5</td><td>Quote a policy that uses the new row in 10 Vandalism Exclusion.<div class="muted mono">MT-324FB62F</div></td><td>A new value that was never rated before is the easiest place to find a missing or wrong rate.</td><td>Vandalism Excluded = FALSE</td><td>In the rating worksheet, the Credit Factor for 10 Vandalism Exclusion should be 1.</td><td>Approved file approved.xlsx, tab 10 Vandalism Exclusion, cell A2</td><td class="mono">C8</td></tr><tr><td>6</td><td>Quote a policy that uses the new row in 42 GL Class Code Factor.<div class="muted mono">MT-78BF8BAE</div></td><td>A new value that was never rated before is the easiest place to find a missing or wrong rate.</td><td>Class Code (Building/Classification screen) = 0099</td><td>In the rating worksheet, the Class Factor for 42 GL Class Code Factor should be 1.11.</td><td>Approved file approved.xlsx, tab 42 GL Class Code Factor, cell A23</td><td class="mono">C8</td></tr><tr><td>7</td><td>Make a mid-term policy change on a policy whose term started before the filing date.<div class="muted mono">MT-81306C63</div></td><td>Existing customers should keep their original rates until renewal. This is the confirmed company rule.</td><td>A policy that started before 3/15/2027; add a premium-bearing change effective on or after 3/15/2027.</td><td>The rating worksheet should keep the original rates (rate book of the term inception), not the new ones.</td><td>Company rule: rate book of the term inception</td><td class="mono">C3</td></tr><tr><td>8</td><td>Quote exactly on the lower edge of a 121 BLD Number of Stories band, where the factor changes.<div class="muted mono">MT-BB6BB26A</div></td><td>The most common band error is off by one, which gives the wrong rate to policies right on the edge.</td><td>Stories = 2</td><td>In the rating worksheet, the Stories Factor for 121 BLD Number of Stories should be 1.0225. It changed by 1.0% in this filing. One step lower (Stories = 1) should show the previous band: 1.01.</td><td>Approved file approved.xlsx, tab 121 BLD Number of Stories, cell A4</td><td class="mono">C6</td></tr>
+      </tbody></table></div>
+      <p class="muted">Full candidate list: test_scenarios.xlsx &gt; All Candidates</p></div>
+    
+    <div class="card"><h2>Assumptions</h2><ul><li>Mid-term policy changes use the rate book of the term inception. This is an assumption to verify with the rating owner.</li><li>The tool compares rate tables only; it does not execute quotes. Expected factors come from the approved workbook.</li><li>Rate book selection (which edition applies on a given date) is carrier-specific; confirm the expected edition per scenario.</li></ul></div>
+    
+  </div>
+
+  <div id="p-in" class="pane">
+    <div class="card"><h2>Input files (SHA-256)</h2><div class="scroll"><table><thead><tr><th>Role</th><th>File</th><th>SHA-256</th></tr></thead><tbody>
+      <tr><td>approved</td><td>approved.xlsx</td><td class="mono">8f04ca1444d374779f8e809f09a49f2d1018092642dfc07fd1c85913311b2220</td></tr><tr><td>export</td><td>export.xlsx</td><td class="mono">2a4b07db0cbd191cf1b69dc1e7457bc69ff8060de89e1ad54b5a08c3e0960628</td></tr><tr><td>baseline</td><td>baseline.xlsx</td><td class="mono">0ea5707178a8249e33ca8ac07a031e60985905285db1e4b0d8f9522cfd9bffb8</td></tr><tr><td>jira</td><td>jira.txt</td><td class="mono">10da2216bd516b74a382db66123befa2b82e18ccb7294442d6e7baaeb5d90268</td></tr></tbody></table></div></div>
+    
+    
+  </div>
+
+  <footer>Generated locally by RateGuard-Lite v1.1.0. Input documents never left this machine. This report verifies rate table contents and scope, not rating algorithms.</footer>
+</main>
+<script>
+(function(){
+  var tabs=document.querySelectorAll('nav.tabs button'),panes=document.querySelectorAll('.pane');
+  tabs.forEach(function(b){b.addEventListener('click',function(){
+    tabs.forEach(function(x){x.classList.remove('on')});panes.forEach(function(p){p.classList.remove('on')});
+    b.classList.add('on');document.getElementById(b.dataset.pane).classList.add('on');});});
+  var lvl='ALL',q='',rows=document.querySelectorAll('#ft tbody tr.f');
+  function apply(){rows.forEach(function(r){
+    var ok=(lvl==='ALL'||r.dataset.lvl===lvl)&&(!q||r.textContent.toLowerCase().indexOf(q)>-1);
+    r.style.display=ok?'':'none';var d=r.nextElementSibling;if(!ok){d.classList.remove('open');}d.style.display=ok&&d.classList.contains('open')?'table-row':'none';});}
+  document.querySelectorAll('#lvlfilters button').forEach(function(b){b.addEventListener('click',function(){
+    document.querySelectorAll('#lvlfilters button').forEach(function(x){x.classList.remove('on')});b.classList.add('on');lvl=b.dataset.lvl;apply();});});
+  var qi=document.getElementById('q');if(qi){qi.addEventListener('input',function(){q=qi.value.toLowerCase();apply();});}
+  rows.forEach(function(r){r.addEventListener('click',function(){var d=r.nextElementSibling;d.classList.toggle('open');d.style.display=d.classList.contains('open')?'table-row':'none';});});
+})();
+</script>
+</body>
+</html>
